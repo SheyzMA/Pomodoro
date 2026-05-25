@@ -853,7 +853,7 @@ function setActiveTask(taskId, subjectId) {
   state.freeTask = false;
   if (state.running) pauseTimer();
   state.activeTaskId = taskId;
-  state.activeSubjectId = subjectId;
+  state.activeSubjectId = subjectId || null;
   state.timeLeft  = state.durations[state.mode] * 60;
   state.totalTime = state.timeLeft;
   document.body.classList.remove('is-started');
@@ -2675,7 +2675,7 @@ function calSaveNewTask(dateKey, fallbackStartMin, fallbackEndMin) {
 
 function calActivateTask(taskId, subjectId, e) {
   e.stopPropagation();
-  setActiveTask(taskId, subjectId);
+  setActiveTask(taskId, subjectId || null);
 }
 
 // ── Keyboard shortcuts ─────────────────────────
