@@ -860,9 +860,9 @@ function setActiveTask(taskId, subjectId) {
   renderTimer();
   const task    = state.tasks.find(t => t.id === taskId);
   const subject = state.subjects.find(s => s.id === subjectId);
-  if (!task || !subject) return;
+  if (!task) return;
 
-  document.getElementById('bannerSubject').textContent = `${subject.emoji || ''} ${subject.name}`.trim();
+  document.getElementById('bannerSubject').textContent = subject ? `${subject.emoji || ''} ${subject.name}`.trim() : 'Sans matière';
   document.getElementById('bannerTask').textContent    = task.name;
   document.getElementById('activeTaskBanner').style.display = 'flex';
   renderActiveTaskLinks(task);
