@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Focus — Pomodoro & Planner</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ── Orbs (reference site aesthetic) ── -->
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <!-- ── Page Shell ── -->
+  <div class="page-shell">
+
+  <!-- ── App Shell ── -->
+  <div class="app">
+
+    <header class="app-header">
+      <div class="app-title-wrap">
+        <div class="app-title" id="appTitle">Focus</div>
+        <div class="app-subtitle" id="appSubtitle">Lundi 25 mai · 12:26</div>
+      </div>
+      <nav class="tab-bar tab-switch" id="tabBar">
+        <button class="tab tab-free" id="freeTaskTab" data-tab="free" onclick="setFreeTask()" title="Tâche libre">∞</button>
+        <button class="tab active" data-tab="timer" onclick="switchTab('timer')">
+          <span>Timer</span>
+        </button>
+        <button class="tab" data-tab="planner" onclick="switchTab('planner')">
+          <span>Planner</span>
+        </button>
+        <button class="tab" data-tab="stats" onclick="switchTab('stats')">
+          <span>Résumé</span>
+        </button>
+        <button class="tab" data-tab="calendar" onclick="switchTab('calendar')">
+          <span>Calendrier</span>
+        </button>
+        <button class="tab tab-spotify" data-tab="spotify" onclick="switchTab('spotify')" title="Spotify">
+          <svg class="sp-logo" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424a.622.622 0 0 1-.857.207c-2.348-1.435-5.304-1.76-8.785-.964a.623.623 0 0 1-.277-1.215c3.809-.87 7.077-.496 9.712 1.115.294.18.387.563.207.857zm1.223-2.722a.78.78 0 0 1-1.072.257c-2.687-1.652-6.785-2.131-9.965-1.166a.78.78 0 0 1-.973-.519.781.781 0 0 1 .519-.972c3.632-1.102 8.147-.568 11.234 1.328a.78.78 0 0 1 .257 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71a.937.937 0 1 1-.543-1.792c3.532-1.072 9.404-.865 13.115 1.337a.937.937 0 0 1-.955 1.612z"/>
+          </svg>
+        </button>
+      </nav>
+      <button class="header-gear-btn" onclick="openSettingsModal()" title="Personnalisation">⚙</button>
+    </header>
+
+
+    <!-- ════════════════════════════════
+         TAB 1 — FOCUS / TIMER
+    ════════════════════════════════ -->
+    <div class="tab-content active" id="tab-timer">
+
+      <!-- Timer ring -->
+      <div class="timer-container">
+        <div class="timer-ring-wrap ring-idle" id="timerRingWrap" onclick="toggleTimer()">
+          <svg class="timer-ring" id="timerRingSvg" viewBox="0 0 300 300">
+            <circle class="ring-bg"       cx="150" cy="150" r="130"/>
+            <circle class="ring-progress" id="ringProgress" cx="150" cy="150" r="130"
+              stroke-dasharray="816.8" stroke-dashoffset="0"/>
+          </svg>
+          <div class="timer-inner">
+            <div class="timer-mode-label" id="timerModeLabel">Pomodoro</div>
+            <div class="timer-display"    id="timerDisplay">25:00</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls (visible only when running, right below the ring) -->
+      <div class="timer-controls" id="timerControls">
+        <button class="control-btn secondary" onclick="resetTimer()" title="Réinitialiser">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+          </svg>
+        </button>
+        <button class="control-btn primary" id="mainBtn" onclick="toggleTimer()">
+          <svg id="playIcon"  viewBox="0 0 24 24" fill="currentColor"><polygon points="7,4 20,12 7,20"/></svg>
+          <svg id="pauseIcon" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+            <rect x="6"  y="4" width="4" height="16" rx="1"/>
+            <rect x="14" y="4" width="4" height="16" rx="1"/>
+          </svg>
+        </button>
+        <button class="control-btn secondary" onclick="skipTimer()" title="Passer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="tap-hint" id="tapHint">Appuie pour lancer</div>
+      <div class="timer-session-count" id="sessionDots"></div>
+
+      <!-- Mode cards -->
+      <div class="mode-cards fade-up">
+        <button class="mode-card active" data-mode="pomodoro" onclick="setMode('pomodoro')">
+          <span class="mode-label">Pomodoro</span>
+          <span class="mode-time"><span id="durCard-pomodoro">25</span>m</span>
+        </button>
+        <button class="mode-card" data-mode="short" onclick="setMode('short')">
+          <span class="mode-label">Short Break</span>
+          <span class="mode-time"><span id="durCard-short">5</span>m</span>
+        </button>
+        <button class="mode-card" data-mode="long" onclick="setMode('long')">
+          <span class="mode-label">Long Break</span>
+          <span class="mode-time"><span id="durCard-long">15</span>m</span>
+        </button>
+      </div>
+
+      <div class="subject-quick-wrap">
+        <div class="subject-quick-header">
+          <div class="subject-quick-title">Matiere</div>
+          <button class="subject-all-btn" onclick="toggleAllTasksPanel()">Toutes ›</button>
+        </div>
+        <div class="subject-quick" id="subjectQuick"></div>
+      </div>
+
+      <!-- All Tasks Panel -->
+      <div class="all-tasks-panel" id="allTasksPanel">
+        <div class="all-tasks-inner" id="allTasksInner"></div>
+      </div>
+
+      <!-- Active task pill (apparaît au-dessus de tâche libre quand matière/tâche active) -->
+      <div class="active-task-banner focus-pill" id="activeTaskBanner" style="display:none">
+        <div class="active-task-dot" id="activeTaskDot" onclick="toggleTimer()" title="Lancer"></div>
+        <div class="focus-pill-info">
+          <div class="focus-pill-title" id="bannerTask">—</div>
+          <div class="focus-pill-sub" id="bannerSubject">—</div>
+          <div class="focus-pill-links" id="activeTaskLinks"></div>
+        </div>
+        <button class="banner-edit-btn" onclick="openEditTaskModal(state.activeTaskId)" title="Modifier">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+        <button class="active-task-clear" onclick="clearActiveTask()">✕</button>
+      </div>
+
+
+      <div class="timer-bottom-spacer"></div>
+
+      <button class="personalize-link" id="personalizeToggle" onclick="togglePersonalize()">Personnaliser ›</button>
+
+      <div class="mini-settings" id="miniSettings">
+        <div class="mini-row">
+          <div class="mini-label">Travail <span>min</span></div>
+          <div class="mini-stepper">
+            <button onclick="changeDuration('pomodoro',-1)">−</button>
+            <span id="dur-pomodoro">25</span>
+            <button onclick="changeDuration('pomodoro',1)">+</button>
+          </div>
+        </div>
+        <div class="mini-row">
+          <div class="mini-label">Pause <span>min</span></div>
+          <div class="mini-stepper">
+            <button onclick="changeDuration('short',-1)">−</button>
+            <span id="dur-short">5</span>
+            <button onclick="changeDuration('short',1)">+</button>
+          </div>
+        </div>
+        <div class="mini-row">
+          <div class="mini-label">Tours</div>
+          <div class="mini-stepper">
+            <button onclick="changeDuration('sessions',-1)">−</button>
+            <span id="dur-sessions">4</span>
+            <button onclick="changeDuration('sessions',1)">+</button>
+          </div>
+        </div>
+      </div>
+
+
+    </div><!-- /tab-timer -->
+
+
+    <!-- ════════════════════════════════
+         TAB 2 — PLANNER
+    ════════════════════════════════ -->
+    <div class="tab-content" id="tab-planner">
+
+      <div class="planner-header">
+        <h2 class="page-title fade-up">Planner</h2>
+        <div class="planner-header-right">
+          <div class="filter-seg">
+            <button class="filter-btn active" id="filterAll" onclick="setTaskFilter('all')">Toutes</button>
+            <button class="filter-btn" id="filterToday" onclick="setTaskFilter('today')">Aujourd'hui</button>
+          </div>
+          <button class="fab-inline" onclick="openSubjectModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Matière
+          </button>
+        </div>
+      </div>
+
+      <div id="subjectList" class="subject-list"></div>
+
+      <div class="empty-state" id="plannerEmpty">
+        <div class="empty-icon">📚</div>
+        <p class="empty-title">Aucune matière</p>
+        <p class="empty-sub">Ajoute une matière pour commencer à planifier tes sessions de révision.</p>
+        <button class="btn-primary" style="margin-top:8px" onclick="openSubjectModal()">Ajouter une matière</button>
+      </div>
+
+    </div><!-- /tab-planner -->
+
+
+    <!-- ════════════════════════════════
+         TAB 3 — STATS
+    ════════════════════════════════ -->
+    <div class="tab-content" id="tab-stats">
+
+      <div class="planner-header">
+        <h2 class="page-title fade-up">Statistiques</h2>
+        <button class="link-button" onclick="resetStats()">Reinitialiser</button>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card accent-red">
+          <div class="stat-value" id="statTotalPomodoros">0</div>
+          <div class="stat-label">Pomodoros aujourd'hui</div>
+        </div>
+        <div class="stat-card accent-blue">
+          <div class="stat-value" id="statTotalMinutes">0</div>
+          <div class="stat-label">Minutes de focus</div>
+        </div>
+        <div class="stat-card accent-green">
+          <div class="stat-value" id="statStreak">0</div>
+          <div class="stat-label">Tâches complétées</div>
+        </div>
+        <div class="stat-card accent-purple">
+          <div class="stat-value" id="statSubjects">0</div>
+          <div class="stat-label">Matières actives</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="card-header"><span class="card-title">Par matière</span></div>
+        <div id="statsBreakdown" class="stats-breakdown"></div>
+        <div class="empty-state-small" id="statsEmpty"><p>Lance un pomodoro pour voir tes stats ici.</p></div>
+      </div>
+
+      <div class="card" style="margin-top:12px; margin-bottom:100px">
+        <div class="card-header"><span class="card-title">Activité récente</span></div>
+        <div id="recentActivity" class="recent-list"></div>
+        <div class="empty-state-small" id="activityEmpty"><p>Aucune activité enregistrée.</p></div>
+      </div>
+
+    </div><!-- /tab-stats -->
+
+    <!-- ════════════════════════════════
+         TAB 4 — CALENDAR
+    ════════════════════════════════ -->
+    <div class="tab-content" id="tab-calendar">
+
+      <!-- Top bar -->
+      <div class="cal-header">
+        <h2 class="page-title fade-up">Calendrier</h2>
+        <div class="cal-controls">
+          <!-- View switcher -->
+          <div class="cal-view-seg">
+            <button class="cal-view-btn" data-view="3" onclick="calSetView(3)">3j</button>
+            <button class="cal-view-btn" data-view="5" onclick="calSetView(5)">Sem.</button>
+            <button class="cal-view-btn active" data-view="7" onclick="calSetView(7)">7j</button>
+          </div>
+          <!-- Navigation -->
+          <div class="cal-nav">
+            <button class="cal-nav-btn" onclick="calNavWeek(-1)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15,18 9,12 15,6"/></svg>
+            </button>
+            <button class="cal-today-btn" onclick="calGoToday()">Aujourd'hui</button>
+            <button class="cal-nav-btn" onclick="calNavWeek(1)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9,18 15,12 9,6"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="cal-week-label" id="calWeekLabel"></div>
+
+      <!-- Main layout: timeline + sidebar -->
+      <div class="cal-layout">
+
+        <!-- Timeline area -->
+        <div class="cal-timeline-wrap">
+          <!-- Sticky day-name header row -->
+          <div class="cal-day-headers" id="calDayHeaders"></div>
+          <!-- Scrollable hour grid -->
+          <div class="cal-scroll-area" id="calScrollArea">
+            <div class="cal-grid" id="calGrid"></div>
+          </div>
+        </div>
+
+        <!-- Unscheduled sidebar -->
+        <div class="cal-sidebar">
+          <div class="cal-sidebar-title">Non planifiées</div>
+          <div class="cal-unscheduled" id="calUnscheduled"></div>
+        </div>
+
+      </div>
+
+    </div><!-- /tab-calendar -->
+
+  </div><!-- /app -->
+
+  <!-- ════════════════════════════════
+       MODALS
+  ════════════════════════════════ -->
+
+  <!-- Add Subject -->
+  <div class="modal-overlay" id="subjectModal" onclick="closeOnOverlay(event,'subjectModal')">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <h3 class="modal-title">Nouvelle matière</h3>
+      <div class="form-group">
+        <label class="form-label">Nom de la matière</label>
+        <input class="form-input" id="subjectName" type="text" placeholder="ex: Mathématiques" maxlength="40"
+               onkeydown="if(event.key==='Enter')saveSubject()"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Couleur</label>
+        <div class="color-picker" id="colorPicker"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Emoji (optionnel)</label>
+        <input class="form-input" id="subjectEmoji" type="text" placeholder="📘" maxlength="2"
+               style="width:72px;text-align:center;font-size:24px;padding:8px"/>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('subjectModal')">Annuler</button>
+        <button class="btn-primary"   onclick="saveSubject()">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Task -->
+  <div class="modal-overlay" id="taskModal" onclick="if(event.target===this){editingTaskId=null;document.getElementById('taskSaveBtn').textContent='Ajouter';closeModal('taskModal')}">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <h3 class="modal-title" id="taskModalTitle">Nouvelle tâche</h3>
+      <div class="form-group">
+        <label class="form-label">Description de la tâche</label>
+        <input class="form-input" id="taskName" type="text" placeholder="ex: Exercices chapitre 3" maxlength="80"
+               onkeydown="if(event.key==='Enter')saveTask()"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Lien du cours ou exercice</label>
+        <input class="form-input" id="taskLinkMain" type="url" placeholder="https://..." maxlength="200" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Lien de correction (optionnel)</label>
+        <input class="form-input" id="taskLinkCorrection" type="url" placeholder="https://..." maxlength="200" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Pomodoros estimés</label>
+        <div class="stepper stepper-large">
+          <button onclick="changeTaskPomodoros(-1)">−</button>
+          <span id="taskPomodoros">2</span>
+          <button onclick="changeTaskPomodoros(1)">+</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Priorité</label>
+        <div class="priority-picker">
+          <button class="priority-btn"        data-p="low"    onclick="selectPriority('low')">Basse</button>
+          <button class="priority-btn active" data-p="medium" onclick="selectPriority('medium')">Moyenne</button>
+          <button class="priority-btn"        data-p="high"   onclick="selectPriority('high')">Haute</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="editingTaskId=null;document.getElementById('taskSaveBtn').textContent='Ajouter';closeModal('taskModal')">Annuler</button>
+        <button class="btn-primary" id="taskSaveBtn" onclick="saveTask()">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Task (compact) -->
+  <div class="modal-overlay" id="editTaskModal" onclick="closeOnOverlay(event,'editTaskModal')">
+    <div class="modal-sheet modal-sheet-sm">
+      <div class="modal-handle"></div>
+      <h3 class="modal-title" id="editTaskModalTitle">Modifier</h3>
+      <input class="form-input" id="editTaskName" type="text" placeholder="Nom de la tâche" maxlength="80"
+             onkeydown="if(event.key==='Enter')saveEditTask()"/>
+      <select class="form-input" id="editTaskSubject" style="margin-top:8px"></select>
+      <input class="form-input" id="editTaskLinkMain" type="url" placeholder="Lien cours / exercice" maxlength="200" style="margin-top:8px"/>
+      <input class="form-input" id="editTaskLinkCorrection" type="url" placeholder="Lien correction (optionnel)" maxlength="200" style="margin-top:8px"/>
+      <div class="edit-task-row">
+        <div class="priority-picker" id="editPriorityPicker">
+          <button class="priority-btn" data-p="low"    onclick="editSelectPriority('low')">Basse</button>
+          <button class="priority-btn active" data-p="medium" onclick="editSelectPriority('medium')">Moyenne</button>
+          <button class="priority-btn" data-p="high"   onclick="editSelectPriority('high')">Haute</button>
+        </div>
+        <div class="stepper stepper-large">
+          <button onclick="changeEditPomodoros(-1)">−</button>
+          <span id="editTaskPomodoros">2</span>
+          <button onclick="changeEditPomodoros(1)">+</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal('editTaskModal')">Annuler</button>
+        <button class="btn-primary" onclick="saveEditTask()">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════
+       TAB 5 — SPOTIFY
+  ════════════════════════════════ -->
+  <div class="tab-content" id="tab-spotify">
+    <h2 class="page-title fade-up">Spotify</h2>
+
+    <div class="sp-url-row fade-up">
+      <input class="sp-url-input" id="spUrlInput" type="url"
+             placeholder="Colle un lien Spotify (playlist, album, titre…)"
+             onkeydown="if(event.key==='Enter')spLoad()"/>
+      <button class="sp-load-btn" onclick="spLoad()">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+          <polygon points="6,3 20,12 6,21"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="sp-presets-wrap fade-up">
+      <div class="sp-presets-header">
+        <span class="sp-presets-label">Suggestions</span>
+        <button class="sp-edit-btn" id="spEditBtn" onclick="spToggleEdit()">Modifier</button>
+      </div>
+      <div class="sp-presets" id="spPresets"></div>
+      <div class="sp-add-form" id="spAddForm">
+        <input class="sp-add-input" id="spAddName" placeholder="Nom (ex: Lo-fi)" maxlength="30"
+               onkeydown="if(event.key==='Enter')document.getElementById('spAddUrl').focus()"/>
+        <input class="sp-add-input" id="spAddUrl" type="url" placeholder="Lien Spotify"
+               onkeydown="if(event.key==='Enter')spAddPreset()"/>
+        <button class="sp-add-confirm" onclick="spAddPreset()">Ajouter</button>
+      </div>
+    </div>
+
+    <div class="sp-embed-wrap" id="spEmbedWrap">
+      <div class="sp-placeholder" id="spPlaceholder">
+        <svg viewBox="0 0 24 24" fill="none" width="48" height="48" opacity=".18">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M8 11.5c2.5-1 5.5-.8 7.5.5M7 14.5c3-1.5 7-1.2 10 .5M9.5 17.5c2-1 4-1 5.5 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <p>Colle un lien Spotify ci-dessus</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Settings -->
+  <div class="modal-overlay" id="settingsModal" onclick="closeOnOverlay(event,'settingsModal')">
+    <div class="modal-sheet modal-sheet-xl settings-sheet">
+      <div class="modal-handle"></div>
+      <div class="settings-head">
+        <div>
+          <h3 class="modal-title">Personnalisation</h3>
+          <p class="settings-kicker">Tout ce qui se voit peut être ajusté.</p>
+        </div>
+        <button class="btn-secondary settings-reset-btn" onclick="resetCustomization()">Réinitialiser</button>
+      </div>
+
+      <div class="settings-grid">
+        <section class="settings-panel">
+          <h4>Identité</h4>
+          <div class="form-group">
+            <label class="form-label" for="appNameInput">Nom de l'app</label>
+            <input class="form-input" id="appNameInput" type="text" maxlength="24" placeholder="Focus" oninput="setAppIdentity()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="appSubtitleInput">Sous-titre</label>
+            <input class="form-input" id="appSubtitleInput" type="text" maxlength="60" placeholder="Ton espace de travail" oninput="setAppIdentity()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="defaultTabSelect">Écran d’accueil</label>
+            <select class="form-input" id="defaultTabSelect" onchange="setDefaultTab(this.value)">
+              <option value="timer">Timer</option>
+              <option value="planner">Planner</option>
+              <option value="stats">Résumé</option>
+              <option value="calendar">Calendrier</option>
+              <option value="spotify">Spotify</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="settings-panel">
+          <h4>Style</h4>
+          <div class="form-group">
+            <label class="form-label">Thème</label>
+            <div class="settings-choice-grid" id="themeChoices">
+              <button type="button" class="settings-choice active" data-theme="aurora" onclick="setThemePreset('aurora')">Aurora</button>
+              <button type="button" class="settings-choice" data-theme="paper" onclick="setThemePreset('paper')">Paper</button>
+              <button type="button" class="settings-choice" data-theme="sunrise" onclick="setThemePreset('sunrise')">Sunrise</button>
+              <button type="button" class="settings-choice" data-theme="graphite" onclick="setThemePreset('graphite')">Graphite</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="accentInput">Couleur d'accent</label>
+            <div class="accent-row">
+              <input class="accent-input" id="accentInput" type="color" value="#3a6cff" onchange="setAccent(this.value)" />
+              <div class="accent-swatches" id="accentSwatches"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ambiance</label>
+            <div class="settings-toggle-list">
+              <label class="settings-toggle"><span>Orbes de fond</span><input type="checkbox" id="showOrbsToggle" onchange="setShowOrbs(this.checked)" /></label>
+              <label class="settings-toggle"><span>Compacité</span><input type="checkbox" id="compactToggle" onchange="setCompactMode(this.checked)" /></label>
+              <label class="settings-toggle"><span>Son de fin</span><input type="checkbox" id="soundToggle" onchange="setSoundEnabled(this.checked)" /></label>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-panel settings-panel-wide">
+          <h4>Navigation</h4>
+          <div class="settings-columns">
+            <div class="form-group">
+              <label class="form-label">Visibilité des onglets</label>
+              <div class="settings-toggle-list">
+                <label class="settings-toggle"><span>Planner</span><input type="checkbox" id="tabVisible-planner" onchange="setTabVisible('planner', this.checked)" /></label>
+                <label class="settings-toggle"><span>Résumé</span><input type="checkbox" id="tabVisible-stats" onchange="setTabVisible('stats', this.checked)" /></label>
+                <label class="settings-toggle"><span>Calendrier</span><input type="checkbox" id="tabVisible-calendar" onchange="setTabVisible('calendar', this.checked)" /></label>
+                <label class="settings-toggle"><span>Spotify</span><input type="checkbox" id="tabVisible-spotify" onchange="setTabVisible('spotify', this.checked)" /></label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Ordre des onglets</label>
+              <p class="settings-help">Fais glisser les onglets dans la barre en haut. Le réglage est enregistré automatiquement.</p>
+              <div class="settings-order-preview" id="tabOrderPreview"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="settings-footer">
+        <button class="btn-secondary" onclick="exportCustomization()">Exporter</button>
+        <button class="btn-secondary" onclick="importCustomization()">Importer</button>
+        <button class="btn-primary" onclick="closeModal('settingsModal')">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page-shell -->
+
+  <script src="app.js"></script>
+</body>
+</html>
