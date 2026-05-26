@@ -158,6 +158,8 @@ let state = {
 };
 
 let timerInterval = null;
+let timerStartedAt = null;   // Date.now() when timer last started
+let timerBaseLeft  = null;   // timeLeft value when timer last started
 let currentSubjectId = null;  // for task modal
 let taskPomodoroCount = 2;
 let taskPriority = 'medium';
@@ -731,7 +733,9 @@ function startTimer() {
     void dot.offsetWidth;
     dot.classList.add('running');
   }
-  timerInterval = setInterval(tick, 1000);
+  timerStartedAt = Date.now();
+  timerBaseLeft  = state.timeLeft;
+  timerInterval = setInterval(tick, 500);
   scrollToTimer();
   const allPanel = document.getElementById('allTasksPanel');
   if (allPanel && allPanel.classList.contains('open')) {
@@ -742,6 +746,7 @@ function startTimer() {
 }
 
 function pauseTimer() {
+  syncTimerFromClock();
   state.running = false;
   document.getElementById('playIcon').style.display  = '';
   document.getElementById('pauseIcon').style.display = 'none';
@@ -752,6 +757,17 @@ function pauseTimer() {
   const dot = document.getElementById('activeTaskDot');
   if (dot) dot.classList.remove('running');
   clearInterval(timerInterval);
+  timerStartedAt = null;
+}
+
+function syncTimerFromClock() {
+  if (!timerStartedAt) return;
+  const elapsed = Math.floor((Date.now() - timerStartedAt) / 1000);
+  if (state.freeTask) {
+    state.timeLeft = timerBaseLeft + elapsed;
+  } else {
+    state.timeLeft = Math.max(0, timerBaseLeft - elapsed);
+  }
 }
 
 function logFreeTaskSession() {
@@ -799,16 +815,11 @@ function skipTimer() {
 }
 
 function tick() {
-  if (state.freeTask) {
-    state.timeLeft++;
-    renderTimer();
-    return;
-  }
-  if (state.timeLeft <= 0) {
+  syncTimerFromClock();
+  if (!state.freeTask && state.timeLeft <= 0) {
     onTimerComplete(true);
     return;
   }
-  state.timeLeft--;
   renderTimer();
 }
 
