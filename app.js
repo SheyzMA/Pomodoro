@@ -3,6 +3,107 @@
    Vanilla JS, no dependencies
 ───────────────────────────────────────────── */
 
+// ── Touch-to-drag polyfill ──────────────────────
+(function () {
+  let dragEl = null, lastTarget = null, clone = null, offsetX = 0, offsetY = 0;
+
+  function copyDragData(src, dst) {
+    const store = {};
+    dst.dataTransfer = {
+      _data: store,
+      effectAllowed: 'move',
+      dropEffect: 'move',
+      setData(k, v) { store[k] = v; },
+      getData(k) { return store[k] || ''; },
+      setDragImage() {},
+    };
+    if (src._dragData) Object.assign(store, src._dragData);
+  }
+
+  function fire(type, target, touch, extra) {
+    const rect = target.getBoundingClientRect();
+    const ev = new MouseEvent(type, {
+      bubbles: true, cancelable: true,
+      clientX: touch.clientX, clientY: touch.clientY,
+      screenX: touch.screenX, screenY: touch.screenY,
+    });
+    copyDragData(dragEl || {}, ev);
+    if (extra) Object.assign(ev, extra);
+    target.dispatchEvent(ev);
+    return ev;
+  }
+
+  document.addEventListener('touchstart', e => {
+    const el = e.target.closest('[draggable="true"]');
+    if (!el) return;
+    const touch = e.touches[0];
+    const rect = el.getBoundingClientRect();
+    offsetX = touch.clientX - rect.left;
+    offsetY = touch.clientY - rect.top;
+    dragEl = el;
+    dragEl._dragData = {};
+
+    const ev = new Event('dragstart', { bubbles: true, cancelable: true });
+    copyDragData({}, ev);
+    dragEl.dispatchEvent(ev);
+    dragEl._dragData = ev.dataTransfer._data;
+
+    // visual clone
+    clone = el.cloneNode(true);
+    clone.style.cssText = `
+      position:fixed; pointer-events:none; z-index:9999; opacity:.8;
+      width:${rect.width}px; left:${touch.clientX - offsetX}px; top:${touch.clientY - offsetY}px;
+      margin:0; transform:scale(1.03); box-shadow:0 8px 24px rgba(0,0,0,.18);
+      transition:none;
+    `;
+    document.body.appendChild(clone);
+    el.classList.add('dragging');
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!dragEl) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    clone.style.left = (touch.clientX - offsetX) + 'px';
+    clone.style.top  = (touch.clientY - offsetY) + 'px';
+
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!target) return;
+
+    if (lastTarget && lastTarget !== target) {
+      const ev = new Event('dragleave', { bubbles: true });
+      copyDragData(dragEl, ev);
+      lastTarget.dispatchEvent(ev);
+    }
+    const ov = new Event('dragover', { bubbles: true, cancelable: true });
+    ov.clientX = touch.clientX; ov.clientY = touch.clientY;
+    ov.dataTransfer = dragEl._dt || { getData: k => dragEl._dragData?.[k] || '', setData(){}, effectAllowed:'move', dropEffect:'move' };
+    ov.preventDefault = () => {};
+    target.dispatchEvent(ov);
+    lastTarget = target;
+  }, { passive: false });
+
+  document.addEventListener('touchend', e => {
+    if (!dragEl) return;
+    const touch = e.changedTouches[0];
+    const target = document.elementFromPoint(touch.clientX, touch.clientY);
+
+    if (target) {
+      const drop = new Event('drop', { bubbles: true, cancelable: true });
+      drop.clientX = touch.clientX; drop.clientY = touch.clientY;
+      drop.dataTransfer = { getData: k => dragEl._dragData?.[k] || '', setData(){}, effectAllowed:'move', dropEffect:'move' };
+      drop.preventDefault = () => {};
+      target.dispatchEvent(drop);
+    }
+
+    const end = new Event('dragend', { bubbles: true });
+    dragEl.dispatchEvent(end);
+    dragEl.classList.remove('dragging');
+    clone?.remove();
+    clone = null; dragEl = null; lastTarget = null;
+  }, { passive: true });
+})();
+
 // ── State ──────────────────────────────────────
 const DEFAULT_TAB_ORDER = ['free', 'timer', 'planner', 'stats', 'calendar', 'spotify'];
 const DEFAULT_PREFS = {
@@ -632,6 +733,12 @@ function startTimer() {
   }
   timerInterval = setInterval(tick, 1000);
   scrollToTimer();
+  const allPanel = document.getElementById('allTasksPanel');
+  if (allPanel && allPanel.classList.contains('open')) {
+    allPanel.classList.remove('open');
+    const allBtn = document.querySelector('.subject-all-btn');
+    if (allBtn) allBtn.textContent = 'Toutes ›';
+  }
 }
 
 function pauseTimer() {
@@ -926,41 +1033,75 @@ function setFreeTask() {
   startTimer();
 }
 
+function renderAllTasksPanel() {
+  const panel = document.getElementById('allTasksPanel');
+  const inner = document.getElementById('allTasksInner');
+  const btn   = document.querySelector('.subject-all-btn');
+  if (!panel || !panel.classList.contains('open')) return;
+  inner.innerHTML = '';
+  state.subjects.forEach(s => {
+    const tasks = state.tasks.filter(t => t.subjectId === s.id && !t.done);
+    if (tasks.length === 0) return;
+    const section = document.createElement('div');
+    section.className = 'all-tasks-section';
+    section.innerHTML = `<div class="all-tasks-subject"><span style="background:${s.color}" class="all-tasks-dot"></span>${esc(s.emoji ? s.emoji + ' ' : '')}${esc(s.name)}</div>`;
+    tasks.forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'all-tasks-row' + (state.activeTaskId === t.id ? ' active' : '');
+      const pct = Math.min(100, t.pomodoros > 0 ? Math.round(t.donePomodoros / t.pomodoros * 100) : 0);
+      row.innerHTML = `
+        <span class="all-tasks-name">${esc(t.name)}</span>
+        <span class="all-tasks-pom">
+          <span class="all-tasks-bar"><span class="all-tasks-bar-fill" style="width:${pct}%"></span></span>
+          <span class="all-tasks-pom-txt">${t.donePomodoros}/${t.pomodoros}</span>
+        </span>`;
+      row.onclick = () => { setActiveTask(t.id, s.id); panel.classList.remove('open'); if (btn) btn.textContent = 'Toutes ›'; };
+      section.appendChild(row);
+    });
+    inner.appendChild(section);
+  });
+  // Section "Sans matière"
+  const orphans = state.tasks.filter(t => !t.done && !state.subjects.find(s => s.id === t.subjectId));
+  if (orphans.length > 0) {
+    const section = document.createElement('div');
+    section.className = 'all-tasks-section';
+    const header = document.createElement('div');
+    header.className = 'all-tasks-subject';
+    header.style.cssText = 'cursor:pointer;user-select:none';
+    header.innerHTML = `<span style="background:#8E8E93" class="all-tasks-dot"></span>Sans matière`;
+    const body = document.createElement('div');
+    body.style.display = 'none';
+    header.onclick = () => { body.style.display = body.style.display === 'none' ? 'block' : 'none'; };
+    orphans.forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'all-tasks-row' + (state.activeTaskId === t.id ? ' active' : '');
+      const pct = Math.min(100, t.pomodoros > 0 ? Math.round(t.donePomodoros / t.pomodoros * 100) : 0);
+      row.innerHTML = `
+        <span class="all-tasks-name">${esc(t.name)}</span>
+        <span class="all-tasks-pom">
+          <span class="all-tasks-bar"><span class="all-tasks-bar-fill" style="width:${pct}%"></span></span>
+          <span class="all-tasks-pom-txt">${t.donePomodoros}/${t.pomodoros}</span>
+        </span>`;
+      row.onclick = () => { setActiveTask(t.id, null); panel.classList.remove('open'); if (btn) btn.textContent = 'Toutes ›'; };
+      body.appendChild(row);
+    });
+    section.appendChild(header);
+    section.appendChild(body);
+    inner.appendChild(section);
+  }
+  if (inner.children.length === 0) {
+    inner.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:13px">Aucune tâche</div>';
+  }
+}
+
 function toggleAllTasksPanel() {
   const panel = document.getElementById('allTasksPanel');
   const inner = document.getElementById('allTasksInner');
   const btn   = document.querySelector('.subject-all-btn');
   if (!panel) return;
-  const isOpen = panel.classList.contains('open');
-  if (!isOpen) {
-    inner.innerHTML = '';
-    state.subjects.forEach(s => {
-      const tasks = state.tasks.filter(t => t.subjectId === s.id && !t.done);
-      if (tasks.length === 0) return;
-      const section = document.createElement('div');
-      section.className = 'all-tasks-section';
-      section.innerHTML = `<div class="all-tasks-subject"><span style="background:${s.color}" class="all-tasks-dot"></span>${esc(s.emoji ? s.emoji + ' ' : '')}${esc(s.name)}</div>`;
-      tasks.forEach(t => {
-        const row = document.createElement('div');
-        row.className = 'all-tasks-row' + (state.activeTaskId === t.id ? ' active' : '');
-        const pct = Math.min(100, t.pomodoros > 0 ? Math.round(t.donePomodoros / t.pomodoros * 100) : 0);
-        row.innerHTML = `
-          <span class="all-tasks-name">${esc(t.name)}</span>
-          <span class="all-tasks-pom">
-            <span class="all-tasks-bar"><span class="all-tasks-bar-fill" style="width:0%" data-pct="${pct}"></span></span>
-            <span class="all-tasks-pom-txt">${t.donePomodoros}/${t.pomodoros}</span>
-          </span>`;
-        row.onclick = () => { setActiveTask(t.id, s.id); panel.classList.remove('open'); btn.textContent = 'Toutes ›'; };
-        section.appendChild(row);
-      });
-      inner.appendChild(section);
-    });
-    if (inner.children.length === 0) {
-      inner.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:13px">Aucune tâche</div>';
-    }
-  }
   panel.classList.toggle('open');
   btn.textContent = panel.classList.contains('open') ? 'Fermer ✕' : 'Toutes ›';
+  renderAllTasksPanel();
   if (panel.classList.contains('open')) {
     setTimeout(() => {
       panel.querySelectorAll('.all-tasks-bar-fill').forEach(el => {
@@ -1007,36 +1148,73 @@ function renderSubjectQuickSelect() {
   const wrap = document.getElementById('subjectQuick');
   if (!wrap) return;
   const selected = getSelectedSubjectId();
+  closeAllPopovers();
   wrap.innerHTML = '';
 
   state.subjects.forEach(s => {
     const chip = document.createElement('div');
-    chip.className = 'subject-chip' + (selected === s.id ? ' active' : '');
+    const isActive = selected === s.id;
+    chip.className = 'subject-chip' + (isActive ? ' active' : '');
+    chip.dataset.subjectId = s.id;
+
+    const top = document.createElement('div');
+    top.className = 'subject-chip-top';
+
     const btn = document.createElement('button');
     btn.className = 'subject-chip-btn';
     btn.textContent = `${s.emoji || ''} ${s.name}`.trim();
     btn.onclick = () => selectSubject(s.id);
+
     const plus = document.createElement('button');
     plus.className = 'subject-chip-plus';
-    plus.textContent = '+';
-    plus.title = 'Voir les taches';
-    plus.onclick = (e) => { e.stopPropagation(); toggleTaskPopover(s.id, plus); };
-    chip.appendChild(btn);
-    chip.appendChild(plus);
+    const plusLabel = document.createElement('span');
+    plusLabel.className = 'subject-chip-plus-label';
+    plusLabel.textContent = '+';
+    plus.appendChild(plusLabel);
+    plus.onclick = (e) => {
+      e.stopPropagation();
+      const isOpen = activePopoverSubjectId === s.id;
+      animatePlusToX(plus, isOpen);
+      toggleTaskPopover(s.id, chip);
+    };
+
+    top.appendChild(btn);
+    top.appendChild(plus);
+    chip.appendChild(top);
     wrap.appendChild(chip);
+
   });
 }
 
 let activePopoverSubjectId = null;
 
-function closeAllPopovers() {
-  document.querySelectorAll('.task-quick-popover').forEach(p => p.remove());
-  activePopoverSubjectId = null;
+
+function animatePlusToX(plusBtn, closing) {
+  const label = plusBtn.querySelector('.subject-chip-plus-label');
+
+  if (closing) {
+    // × slides right then rotates back to +
+    // closing: slide left while rotating back to 0
+    label.animate([
+      { transform: 'translateX(2px) rotate(45deg)' },
+      { transform: 'translateX(0px) rotate(0deg)' }
+    ], { duration: 1500, easing: 'cubic-bezier(.4,0,.2,1)' }).onfinish = () => {
+      label.classList.remove('is-x');
+    };
+  } else {
+    // opening: slide right while rotating to 45deg (looks like ×)
+    label.animate([
+      { transform: 'translateX(0px) rotate(0deg)' },
+      { transform: 'translateX(2px) rotate(45deg)' }
+    ], { duration: 1500, easing: 'cubic-bezier(.4,0,.2,1)' }).onfinish = () => {
+      label.classList.add('is-x');
+    };
+  }
 }
 
-function toggleTaskPopover(subjectId, btn) {
+function toggleTaskPopover(subjectId, chip, isAutoOpen = false) {
   if (activePopoverSubjectId === subjectId) {
-    closeAllPopovers();
+    if (!isAutoOpen) closeAllPopovers();
     return;
   }
   closeAllPopovers();
@@ -1044,66 +1222,62 @@ function toggleTaskPopover(subjectId, btn) {
 
   const subject = state.subjects.find(s => s.id === subjectId);
   if (!subject) return;
-  const tasks = state.tasks.filter(t => t.subjectId === subjectId);
+  const tasks = state.tasks.filter(t => t.subjectId === subjectId && !t.done);
 
-  const pop = document.createElement('div');
-  pop.className = 'task-quick-popover';
+  chip.classList.add('chip-open');
 
-  const header = document.createElement('div');
-  header.className = 'task-quick-popover-header';
-  header.textContent = subject.name;
-  pop.appendChild(header);
-
-  const list = document.createElement('div');
-  list.className = 'task-quick-popover-list';
+  const taskList = document.createElement('div');
+  taskList.className = 'chip-task-list';
 
   if (tasks.length === 0) {
     const empty = document.createElement('div');
-    empty.className = 'task-quick-empty';
+    empty.className = 'chip-task-item';
+    empty.style.color = 'var(--text3)';
     empty.textContent = 'Aucune tâche';
-    list.appendChild(empty);
+    taskList.appendChild(empty);
   } else {
     tasks.forEach(t => {
       const item = document.createElement('div');
-      item.className = 'task-quick-item';
+      item.className = 'chip-task-item';
       item.innerHTML = `
-        <div class="task-quick-check${t.done ? ' done' : ''}"></div>
-        <span class="task-quick-name${t.done ? ' done' : ''}">${esc(t.name)}</span>
-        <span class="task-quick-pom">🍅${t.donePomodoros}/${t.pomodoros}</span>
-      `;
+        <div class="chip-task-check${t.done ? ' done' : ''}"></div>
+        <span class="chip-task-name${t.done ? ' done' : ''}">${esc(t.name)}</span>
+        <span class="chip-task-pom">${t.donePomodoros}/${t.pomodoros}</span>`;
       item.onclick = (e) => {
         e.stopPropagation();
         closeAllPopovers();
-        if (!t.done) {
-          setActiveTask(t.id, subjectId);
-        }
+        setActiveTask(t.id, subjectId);
       };
-      list.appendChild(item);
+      taskList.appendChild(item);
     });
   }
-  pop.appendChild(list);
 
   const footer = document.createElement('div');
-  footer.className = 'task-quick-footer';
-  footer.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Voir dans le Planner`;
-  footer.onclick = (e) => {
-    e.stopPropagation();
-    closeAllPopovers();
-    openSubjectFromHome(subjectId);
-  };
-  pop.appendChild(footer);
+  footer.className = 'chip-footer';
+  footer.textContent = 'Voir dans le Planner →';
+  footer.onclick = (e) => { e.stopPropagation(); closeAllPopovers(); openSubjectFromHome(subjectId); };
+  taskList.appendChild(footer);
 
-  // Attach to body with fixed positioning so overflow/clipping doesn't interfere
-  const btnRect = btn.getBoundingClientRect();
-  pop.style.position = 'fixed';
-  pop.style.top = (btnRect.bottom + 6) + 'px';
-  pop.style.right = (window.innerWidth - btnRect.right) + 'px';
-  document.body.appendChild(pop);
+  chip.appendChild(taskList);
 
-  // Close on outside click
-  setTimeout(() => {
-    document.addEventListener('click', closeAllPopovers, { once: true });
-  }, 0);
+  if (!isAutoOpen) {
+    setTimeout(() => {
+      document.addEventListener('click', closeAllPopovers, { once: true });
+    }, 0);
+  }
+}
+
+function closeAllPopovers() {
+  document.querySelectorAll('.chip-task-list').forEach(p => p.remove());
+  document.querySelectorAll('.subject-chip.chip-open').forEach(c => {
+    c.classList.remove('chip-open');
+    const label = c.querySelector('.subject-chip-plus-label');
+    if (label) {
+      label.getAnimations().forEach(a => a.cancel());
+      label.classList.remove('is-x');
+    }
+  });
+  activePopoverSubjectId = null;
 }
 
 function openSubjectFromHome(subjectId) {
@@ -1200,12 +1374,76 @@ function openTaskModal(subjectId) {
   document.getElementById('taskLinkMain').value = '';
   document.getElementById('taskLinkCorrection').value = '';
   document.getElementById('taskPomodoros').textContent = taskPomodoroCount;
-  document.querySelectorAll('.priority-btn').forEach(b => b.classList.toggle('active', b.dataset.p === 'medium'));
-  const subject = state.subjects.find(s => s.id === subjectId);
-  document.getElementById('taskModalTitle').textContent = `Tâche — ${subject ? subject.name : ''}`;
-  document.getElementById('taskSaveBtn').textContent = 'Ajouter';
+  document.querySelectorAll('#taskModal .priority-btn').forEach(b => b.classList.toggle('active', b.dataset.p === 'medium'));
+  // Initialiser le dropdown matières
+  taskSubjectDropdownSelect(subjectId || null);
+  document.getElementById('taskModalTitle').textContent = 'Nouvelle tâche';
   openModal('taskModal');
   setTimeout(() => document.getElementById('taskName').focus(), 350);
+}
+
+function toggleSubjectDropdown() {
+  const dd = document.getElementById('taskSubjectDropdown');
+  const menu = document.getElementById('taskSubjectMenu');
+  const isOpen = dd.classList.contains('open');
+  if (isOpen) { dd.classList.remove('open'); return; }
+  // Build menu
+  menu.innerHTML = '';
+  const addItem = (id, label, color, emoji) => {
+    const item = document.createElement('div');
+    item.className = 'subject-dropdown-item' + (document.getElementById('taskSubjectSelect').value === (id||'') ? ' selected' : '');
+    item.innerHTML = `<span class="subject-dropdown-item-dot" style="background:${color||'transparent'};${!color?'border:1.5px solid rgba(0,0,0,.15)':''}"></span>${emoji ? emoji + ' ' : ''}${esc(label)}`;
+    item.onclick = () => { taskSubjectDropdownSelect(id); dd.classList.remove('open'); };
+    menu.appendChild(item);
+  };
+  addItem(null, '— Sans matière —', null, '');
+  state.subjects.forEach(s => addItem(s.id, s.name, s.color, s.emoji));
+  dd.classList.add('open');
+  // Close on outside click
+  setTimeout(() => document.addEventListener('click', function handler(e) {
+    if (!dd.contains(e.target)) { dd.classList.remove('open'); document.removeEventListener('click', handler); }
+  }), 0);
+}
+
+function taskSubjectDropdownSelect(id) {
+  document.getElementById('taskSubjectSelect').value = id || '';
+  const subject = id ? state.subjects.find(s => s.id === id) : null;
+  document.getElementById('taskSubjectDot').style.background = subject ? subject.color : 'transparent';
+  document.getElementById('taskSubjectDot').style.border = subject ? 'none' : '1.5px solid rgba(0,0,0,.15)';
+  document.getElementById('taskSubjectLabel').textContent = subject
+    ? `${subject.emoji ? subject.emoji + ' ' : ''}${subject.name}`
+    : '— Sans matière —';
+}
+
+function toggleEditSubjectDropdown() {
+  const dd = document.getElementById('editTaskSubjectDropdown');
+  const menu = document.getElementById('editTaskSubjectMenu');
+  const isOpen = dd.classList.contains('open');
+  if (isOpen) { dd.classList.remove('open'); return; }
+  menu.innerHTML = '';
+  const addItem = (id, label, color, emoji) => {
+    const item = document.createElement('div');
+    item.className = 'subject-dropdown-item' + (document.getElementById('editTaskSubject').value === (id||'') ? ' selected' : '');
+    item.innerHTML = `<span class="subject-dropdown-item-dot" style="background:${color||'transparent'};${!color?'border:1.5px solid rgba(0,0,0,.15)':''}"></span>${emoji ? emoji + ' ' : ''}${esc(label)}`;
+    item.onclick = () => { editSubjectDropdownSelect(id); dd.classList.remove('open'); };
+    menu.appendChild(item);
+  };
+  addItem(null, '— Sans matière —', null, '');
+  state.subjects.forEach(s => addItem(s.id, s.name, s.color, s.emoji));
+  dd.classList.add('open');
+  setTimeout(() => document.addEventListener('click', function handler(e) {
+    if (!dd.contains(e.target)) { dd.classList.remove('open'); document.removeEventListener('click', handler); }
+  }), 0);
+}
+
+function editSubjectDropdownSelect(id) {
+  document.getElementById('editTaskSubject').value = id || '';
+  const subject = id ? state.subjects.find(s => s.id === id) : null;
+  document.getElementById('editTaskSubjectDot').style.background = subject ? subject.color : 'transparent';
+  document.getElementById('editTaskSubjectDot').style.border = subject ? 'none' : '1.5px solid rgba(0,0,0,.15)';
+  document.getElementById('editTaskSubjectLabel').textContent = subject
+    ? `${subject.emoji ? subject.emoji + ' ' : ''}${subject.name}`
+    : '— Sans matière —';
 }
 
 function changeTaskPomodoros(delta) {
@@ -1243,7 +1481,7 @@ function saveTask() {
 
   const task = {
     id: uid(),
-    subjectId: currentSubjectId,
+    subjectId: document.getElementById('taskSubjectSelect').value || null,
     name,
     pomodoros: taskPomodoroCount,
     donePomodoros: 0,
@@ -1274,12 +1512,8 @@ function openEditTaskModal(taskId) {
   document.querySelectorAll('#editPriorityPicker .priority-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.p === taskPriority));
 
-  // Populate subject select
-  const sel = document.getElementById('editTaskSubject');
-  sel.innerHTML = `<option value="">— Sans matière —</option>` +
-    state.subjects.map(s =>
-      `<option value="${escAttr(s.id)}"${s.id === t.subjectId ? ' selected' : ''}>${esc((s.emoji ? s.emoji + ' ' : '') + s.name)}</option>`
-    ).join('');
+  // Initialiser le dropdown matières
+  editSubjectDropdownSelect(t.subjectId || null);
 
   document.getElementById('editTaskModalTitle').textContent = 'Modifier la tâche';
   openModal('editTaskModal');
@@ -1491,9 +1725,48 @@ function renderSubjects() {
       if (chevEl) chevEl.classList.add('open');
     }
   });
+  // ── Carte "Sans matière" (tâches orphelines) — visible seulement dans "Toutes" ──
+  const orphanTasks = state.tasks.filter(t => !state.subjects.find(s => s.id === t.subjectId));
+
+  if (taskFilter === 'all') {
+    const filteredOrphans = orphanTasks;
+    empty.style.display = 'none';
+    const doneSM = filteredOrphans.filter(t => t.done).length;
+    const cardSM = document.createElement('div');
+    cardSM.className = 'subject-card';
+    cardSM.innerHTML = `
+      <div class="subject-card-header" onclick="toggleSubjectExpand('__none__')">
+        <div class="subject-color-dot" style="background:#8E8E93"></div>
+        <div class="subject-card-info">
+          <div class="subject-card-name">Sans matière</div>
+          <div class="subject-card-meta">${filteredOrphans.length === 0 ? 'Aucune tâche' : `${filteredOrphans.length} tâche${filteredOrphans.length !== 1 ? 's' : ''} · ${doneSM} terminée${doneSM !== 1 ? 's' : ''}`}</div>
+        </div>
+        <div class="subject-card-actions">
+          <svg class="chevron icon-btn" id="chev-__none__" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:20px;height:20px;cursor:pointer"><polyline points="9,18 15,12 9,6"/></svg>
+        </div>
+      </div>
+      <div class="subject-tasks" id="tasks-__none__">
+        ${filteredOrphans.map(t => renderTaskRow(t, null)).join('')}
+        <button class="add-task-btn" onclick="openTaskModal(null)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Ajouter une tâche
+        </button>
+      </div>
+    `;
+    list.appendChild(cardSM);
+
+    if (openSubjectIds.has('__none__')) {
+      const tasksEl = cardSM.querySelector('#tasks-__none__');
+      const chevEl  = cardSM.querySelector('#chev-__none__');
+      if (tasksEl) tasksEl.classList.add('open');
+      if (chevEl)  chevEl.classList.add('open');
+    }
+  }
+
   renderSubjectQuickSelect();
   renderFreeTaskSubtitle();
   initDragDrop();
+  renderAllTasksPanel();
 }
 
 function renderTaskRow(task, subject) {
@@ -1529,7 +1802,7 @@ function renderTaskRow(task, subject) {
       <div class="task-actions">
         ${!task.done ? `
         ${isRunning && isActive ? pulseDot : `
-        <button class="icon-btn task-play-btn" onclick="setActiveTask('${task.id}','${subject.id}')" title="Lancer sur le timer" style="color:${isActive ? '#111' : ''}">
+        <button class="icon-btn task-play-btn" onclick="setActiveTask('${task.id}','${subject ? subject.id : ''}')" title="Lancer sur le timer" style="color:${isActive ? '#111' : ''}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/></svg>
         </button>`}
         ` : ''}

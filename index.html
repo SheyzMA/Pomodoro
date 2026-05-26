@@ -187,12 +187,6 @@
             <button class="filter-btn active" id="filterAll" onclick="setTaskFilter('all')">Toutes</button>
             <button class="filter-btn" id="filterToday" onclick="setTaskFilter('today')">Aujourd'hui</button>
           </div>
-          <button class="fab-inline" onclick="openSubjectModal()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Matière
-          </button>
         </div>
       </div>
 
@@ -336,41 +330,36 @@
   </div>
 
   <!-- Add Task -->
-  <div class="modal-overlay" id="taskModal" onclick="if(event.target===this){editingTaskId=null;document.getElementById('taskSaveBtn').textContent='Ajouter';closeModal('taskModal')}">
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
+  <div class="modal-overlay" id="taskModal" onclick="if(event.target===this){editingTaskId=null;closeModal('taskModal')}">
+    <div class="modal-sheet modal-sheet-sm">
       <h3 class="modal-title" id="taskModalTitle">Nouvelle tâche</h3>
-      <div class="form-group">
-        <label class="form-label">Description de la tâche</label>
-        <input class="form-input" id="taskName" type="text" placeholder="ex: Exercices chapitre 3" maxlength="80"
-               onkeydown="if(event.key==='Enter')saveTask()"/>
+      <input class="form-input" id="taskName" type="text" placeholder="Nom de la tâche" maxlength="80"
+             onkeydown="if(event.key==='Enter')saveTask()"/>
+      <div class="subject-dropdown" id="taskSubjectDropdown" style="margin-top:8px">
+        <button type="button" class="subject-dropdown-trigger" id="taskSubjectTrigger" onclick="toggleSubjectDropdown()">
+          <span class="subject-dropdown-dot" id="taskSubjectDot"></span>
+          <span class="subject-dropdown-label" id="taskSubjectLabel">— Sans matière —</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="6,9 12,15 18,9"/></svg>
+        </button>
+        <div class="subject-dropdown-menu" id="taskSubjectMenu"></div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Lien du cours ou exercice</label>
-        <input class="form-input" id="taskLinkMain" type="url" placeholder="https://..." maxlength="200" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">Lien de correction (optionnel)</label>
-        <input class="form-input" id="taskLinkCorrection" type="url" placeholder="https://..." maxlength="200" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">Pomodoros estimés</label>
+      <input type="hidden" id="taskSubjectSelect"/>
+      <input class="form-input" id="taskLinkMain" type="url" placeholder="Lien cours / exercice" maxlength="200" style="margin-top:8px"/>
+      <input class="form-input" id="taskLinkCorrection" type="url" placeholder="Lien correction (optionnel)" maxlength="200" style="margin-top:8px"/>
+      <div class="edit-task-row">
+        <div class="priority-picker">
+          <button class="priority-btn"        data-p="low"    onclick="selectPriority('low')">Basse</button>
+          <button class="priority-btn active" data-p="medium" onclick="selectPriority('medium')">Moyenne</button>
+          <button class="priority-btn"        data-p="high"   onclick="selectPriority('high')">Haute</button>
+        </div>
         <div class="stepper stepper-large">
           <button onclick="changeTaskPomodoros(-1)">−</button>
           <span id="taskPomodoros">2</span>
           <button onclick="changeTaskPomodoros(1)">+</button>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Priorité</label>
-        <div class="priority-picker">
-          <button class="priority-btn"        data-p="low"    onclick="selectPriority('low')">Basse</button>
-          <button class="priority-btn active" data-p="medium" onclick="selectPriority('medium')">Moyenne</button>
-          <button class="priority-btn"        data-p="high"   onclick="selectPriority('high')">Haute</button>
-        </div>
-      </div>
       <div class="modal-actions">
-        <button class="btn-secondary" onclick="editingTaskId=null;document.getElementById('taskSaveBtn').textContent='Ajouter';closeModal('taskModal')">Annuler</button>
+        <button class="btn-secondary" onclick="editingTaskId=null;closeModal('taskModal')">Annuler</button>
         <button class="btn-primary" id="taskSaveBtn" onclick="saveTask()">Ajouter</button>
       </div>
     </div>
@@ -383,7 +372,15 @@
       <h3 class="modal-title" id="editTaskModalTitle">Modifier</h3>
       <input class="form-input" id="editTaskName" type="text" placeholder="Nom de la tâche" maxlength="80"
              onkeydown="if(event.key==='Enter')saveEditTask()"/>
-      <select class="form-input" id="editTaskSubject" style="margin-top:8px"></select>
+      <div class="subject-dropdown" id="editTaskSubjectDropdown" style="margin-top:8px">
+        <button type="button" class="subject-dropdown-trigger" onclick="toggleEditSubjectDropdown()">
+          <span class="subject-dropdown-dot" id="editTaskSubjectDot"></span>
+          <span class="subject-dropdown-label" id="editTaskSubjectLabel">— Sans matière —</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="6,9 12,15 18,9"/></svg>
+        </button>
+        <div class="subject-dropdown-menu" id="editTaskSubjectMenu"></div>
+      </div>
+      <input type="hidden" id="editTaskSubject"/>
       <input class="form-input" id="editTaskLinkMain" type="url" placeholder="Lien cours / exercice" maxlength="200" style="margin-top:8px"/>
       <input class="form-input" id="editTaskLinkCorrection" type="url" placeholder="Lien correction (optionnel)" maxlength="200" style="margin-top:8px"/>
       <div class="edit-task-row">
