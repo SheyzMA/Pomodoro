@@ -128,7 +128,7 @@ let state = {
   totalTime: 25 * 60,
   freeTask: false,
   sessionsCompleted: 0,
-  durations: { pomodoro: 25, short: 5, long: 15, sessions: 4 },
+  durations: { pomodoro: 25, short: 5, long: 15, sessions: 4, pomBadge: 30 },
   activeTaskId: null,
   activeSubjectId: null,
 
@@ -237,7 +237,7 @@ function load() {
   try {
     const s = JSON.parse(raw);
     // Merge only non-timer state
-    state.durations    = s.durations    || state.durations;
+    state.durations    = Object.assign({}, state.durations, s.durations || {});
     state.subjects     = s.subjects     || [];
     state.tasks        = s.tasks        || [];
     state.log          = s.log          || [];
@@ -672,6 +672,35 @@ function persistTabOrder() {
   save();
 }
 
+function activatePomBadge() {
+  if (state.running) return;
+  // Swap pomodoro duration and badge value
+  const oldPomodoro = state.durations.pomodoro;
+  const oldBadge    = state.durations.pomBadge;
+  state.durations.pomodoro = oldBadge;
+  state.durations.pomBadge = oldPomodoro;
+
+  // Update all displays
+  const pomCard = document.getElementById('durCard-pomodoro');
+  if (pomCard) pomCard.textContent = state.durations.pomodoro;
+  const pomEl = document.getElementById('dur-pomodoro');
+  if (pomEl) pomEl.textContent = state.durations.pomodoro;
+  const badgeCard = document.getElementById('durCard-pomBadge');
+  if (badgeCard) badgeCard.textContent = state.durations.pomBadge;
+  const badgeEl = document.getElementById('dur-pomBadge');
+  if (badgeEl) badgeEl.textContent = state.durations.pomBadge;
+
+  state.freeTask = false;
+  state.mode = 'pomodoro';
+  state.timeLeft  = state.durations.pomodoro * 60;
+  state.totalTime = state.timeLeft;
+  document.querySelectorAll('.mode-card').forEach(s => s.classList.toggle('active', s.dataset.mode === 'pomodoro'));
+  document.body.dataset.mode = 'pomodoro';
+  document.getElementById('timerModeLabel').textContent = 'Pomodoro';
+  renderTimer();
+  save();
+}
+
 // ── Timer ──────────────────────────────────────
 function setMode(mode) {
   if (state.running) return; // prevent mode change while running
@@ -906,7 +935,7 @@ function renderSessionDots() {
 
 // ── Duration Settings ──────────────────────────
 function changeDuration(key, delta) {
-  const limits = { pomodoro: [1, 60], short: [1, 30], long: [5, 60], sessions: [2, 8] };
+  const limits = { pomodoro: [1, 60], short: [1, 30], long: [5, 60], sessions: [2, 8], pomBadge: [1, 120] };
   const [min, max] = limits[key];
   state.durations[key] = Math.min(max, Math.max(min, state.durations[key] + delta));
   const durEl = document.getElementById(`dur-${key}`);
@@ -3104,11 +3133,11 @@ function init() {
   document.body.dataset.mode = state.mode;
 
   // Duration UI
-  ['pomodoro','short','long','sessions'].forEach(k => {
+  ['pomodoro','short','long','sessions','pomBadge'].forEach(k => {
     const durEl = document.getElementById(`dur-${k}`);
     if (durEl) durEl.textContent = state.durations[k];
   });
-  ['pomodoro','short','long'].forEach(k => {
+  ['pomodoro','short','long','pomBadge'].forEach(k => {
     const cardValue = document.getElementById(`durCard-${k}`);
     if (cardValue) cardValue.textContent = state.durations[k];
   });

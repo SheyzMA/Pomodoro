@@ -538,6 +538,7 @@ body.is-running #tapHint {
   margin-bottom: 20px;
 }
 .mode-card {
+  position: relative;
   border: 1.5px solid rgba(220,220,228,.6);
   background: #ffffff;
   border-radius: 18px;
@@ -560,6 +561,22 @@ body.is-running #tapHint {
 .mode-time {
   font-size: 20px; font-weight: 700; color: var(--text);
 }
+.mode-card-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 2px 7px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .12s, opacity .12s;
+  box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+.mode-card-badge:active { transform: scale(.9); }
 
 /* ── Tap Hint ── */
 .tap-hint {

@@ -98,6 +98,7 @@
         <button class="mode-card active" data-mode="pomodoro" onclick="setMode('pomodoro')">
           <span class="mode-label">Pomodoro</span>
           <span class="mode-time"><span id="durCard-pomodoro">25</span>m</span>
+          <span class="mode-card-badge" id="pomBadgeDisplay" onclick="event.stopPropagation();activatePomBadge()"><span id="durCard-pomBadge">30</span></span>
         </button>
         <button class="mode-card" data-mode="short" onclick="setMode('short')">
           <span class="mode-label">Short Break</span>
@@ -167,6 +168,14 @@
             <button onclick="changeDuration('sessions',-1)">−</button>
             <span id="dur-sessions">4</span>
             <button onclick="changeDuration('sessions',1)">+</button>
+          </div>
+        </div>
+        <div class="mini-row">
+          <div class="mini-label">Badge <span>min</span></div>
+          <div class="mini-stepper">
+            <button onclick="changeDuration('pomBadge',-1)">−</button>
+            <span id="dur-pomBadge">30</span>
+            <button onclick="changeDuration('pomBadge',1)">+</button>
           </div>
         </div>
       </div>
