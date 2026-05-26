@@ -919,7 +919,169 @@ function renderTimer() {
   ring.style.strokeDasharray  = circumference;
   ring.style.strokeDashoffset = offset;
   ring.classList.toggle('running', state.running);
+
+  // Sync PiP overlay (fallback)
+  const pip = document.getElementById('pipOverlay');
+  if (pip && pip.style.display !== 'none') {
+    document.getElementById('pipTime').textContent = display;
+    document.getElementById('pipMode').textContent = document.getElementById('timerModeLabel').textContent;
+    pip.classList.toggle('pip-running', state.running);
+  }
+  // Sync Document PiP window
+  if (pipWin && !pipWin.closed) {
+    const t = pipWin.document.getElementById('pip-time');
+    const m = pipWin.document.getElementById('pip-mode');
+    if (t) t.textContent = display;
+    if (m) m.textContent = document.getElementById('timerModeLabel').textContent;
+    pipWin.document.body.style.background = state.running ? '#0f0f1a' : '#111118';
+  }
 }
+
+// ── PiP (Picture-in-Picture via canvas) ────────
+let pipVideo = null, pipCanvas = null, pipCtx = null, pipAnimFrame = null;
+
+function drawPipFrame() {
+  if (!pipCtx) return;
+  const w = pipCanvas.width, h = pipCanvas.height;
+  const display = formatStopwatch(state.timeLeft);
+  const mode = document.getElementById('timerModeLabel').textContent;
+
+  pipCtx.clearRect(0, 0, w, h);
+
+  // Background
+  pipCtx.fillStyle = state.running ? '#1a1a2e' : '#111118';
+  roundRect(pipCtx, 0, 0, w, h, 24);
+  pipCtx.fill();
+
+  // Accent ring arc
+  const cx = w / 2, cy = h / 2 - 10, r = 70;
+  const progress = state.totalTime > 0 ? state.timeLeft / state.totalTime : 1;
+  pipCtx.beginPath();
+  pipCtx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI, false);
+  pipCtx.strokeStyle = 'rgba(255,255,255,.1)';
+  pipCtx.lineWidth = 6;
+  pipCtx.stroke();
+  if (!state.freeTask) {
+    pipCtx.beginPath();
+    pipCtx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * (1 - progress), false);
+    pipCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#3a6cff';
+    pipCtx.lineWidth = 6;
+    pipCtx.lineCap = 'round';
+    pipCtx.stroke();
+  }
+
+  // Time
+  pipCtx.fillStyle = '#ffffff';
+  pipCtx.font = 'bold 42px system-ui, sans-serif';
+  pipCtx.textAlign = 'center';
+  pipCtx.textBaseline = 'middle';
+  pipCtx.fillText(display, cx, cy);
+
+  // Mode label
+  pipCtx.fillStyle = 'rgba(255,255,255,.5)';
+  pipCtx.font = '600 14px system-ui, sans-serif';
+  pipCtx.fillText(mode, cx, h - 22);
+
+  pipAnimFrame = requestAnimationFrame(drawPipFrame);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+let pipWin = null;
+
+async function openPip() {
+  // Document PiP (Chrome 116+) — vraie fenêtre HTML
+  if (window.documentPictureInPicture) {
+    try {
+      pipWin = await window.documentPictureInPicture.requestWindow({ width: 200, height: 160 });
+
+      // Copier les styles
+      [...document.styleSheets].forEach(ss => {
+        try {
+          const link = pipWin.document.createElement('link');
+          link.rel = 'stylesheet'; link.href = ss.href || '';
+          if (ss.href) pipWin.document.head.appendChild(link);
+        } catch(e) {}
+      });
+
+      // Injecter CSS minimal directement
+      const style = pipWin.document.createElement('style');
+      style.textContent = `
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+          background: #111118;
+          display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+          height: 100vh; font-family: system-ui, sans-serif;
+          cursor: pointer; user-select: none;
+        }
+        #pip-mode { font-size: 11px; font-weight: 600; color: rgba(255,255,255,.5); margin-bottom: 4px; }
+        #pip-time { font-size: 38px; font-weight: 700; color: #fff; line-height: 1; }
+      `;
+      pipWin.document.head.appendChild(style);
+
+      const modeEl = pipWin.document.createElement('div');
+      modeEl.id = 'pip-mode';
+      modeEl.textContent = document.getElementById('timerModeLabel').textContent;
+
+      const timeEl = pipWin.document.createElement('div');
+      timeEl.id = 'pip-time';
+      timeEl.textContent = document.getElementById('timerDisplay').textContent;
+
+      pipWin.document.body.appendChild(modeEl);
+      pipWin.document.body.appendChild(timeEl);
+      pipWin.document.body.addEventListener('click', toggleTimer);
+      pipWin.addEventListener('pagehide', closePip);
+      return;
+    } catch(e) {}
+  }
+  // Fallback overlay
+  document.getElementById('pipOverlay').style.display = 'block';
+}
+
+function closePip() {
+  cancelAnimationFrame(pipAnimFrame);
+  pipAnimFrame = null;
+  if (pipWin && !pipWin.closed) pipWin.close();
+  pipWin = null;
+  if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
+  if (pipVideo) { pipVideo.srcObject?.getTracks().forEach(t => t.stop()); pipVideo.remove(); pipVideo = null; }
+  pipCanvas = null; pipCtx = null;
+  document.getElementById('pipOverlay').style.display = 'none';
+}
+
+// ── PiP overlay drag (fallback) ─────────────────
+let pipDragging = false, pipDX = 0, pipDY = 0;
+(function() {
+  const pip = document.getElementById('pipOverlay');
+  if (!pip) return;
+  pip.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('pip-close')) return;
+    pipDragging = true;
+    pipDX = e.clientX - pip.getBoundingClientRect().left;
+    pipDY = e.clientY - pip.getBoundingClientRect().top;
+    pip.style.transition = 'none'; e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!pipDragging) return;
+    pip.style.right = 'auto'; pip.style.bottom = 'auto';
+    pip.style.left = (e.clientX - pipDX) + 'px';
+    pip.style.top  = (e.clientY - pipDY) + 'px';
+  });
+  document.addEventListener('mouseup', () => { pipDragging = false; });
+})();
 
 function renderSessionDots() {
   const container = document.getElementById('sessionDots');

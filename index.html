@@ -53,6 +53,13 @@
     ════════════════════════════════ -->
     <div class="tab-content active" id="tab-timer">
 
+      <!-- PiP overlay -->
+      <div class="pip-overlay" id="pipOverlay" style="display:none" onclick="toggleTimer()">
+        <div class="pip-time" id="pipTime">25:00</div>
+        <div class="pip-mode" id="pipMode">Pomodoro</div>
+        <button class="pip-close" onclick="event.stopPropagation();closePip()" title="Fermer">×</button>
+      </div>
+
       <!-- Timer ring -->
       <div class="timer-container">
         <div class="timer-ring-wrap ring-idle" id="timerRingWrap" onclick="toggleTimer()">
@@ -90,6 +97,9 @@
         </button>
       </div>
 
+      <button class="pip-btn" id="pipBtn" onclick="openPip()" title="Mini timer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M17 2l5 5-5 5"/><path d="M7 2L2 7l5 5"/></svg>
+      </button>
       <div class="tap-hint" id="tapHint">Appuie pour lancer</div>
       <div class="timer-session-count" id="sessionDots"></div>
 
