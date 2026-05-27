@@ -20,9 +20,23 @@
   <div class="app">
 
     <header class="app-header">
-      <div class="app-title-wrap">
-        <div class="app-title" id="appTitle">Focus</div>
-        <div class="app-subtitle" id="appSubtitle">Lundi 25 mai · 12:26</div>
+      <div class="app-brand">
+        <svg class="brand-logo" viewBox="0 0 520 120" role="img" aria-label="Cadoro" xmlns="http://www.w3.org/2000/svg">
+          <g class="brand-wordmark">
+            <text x="0" y="86">CAD</text>
+            <text x="300" y="86">RO</text>
+          </g>
+          <g class="brand-o" aria-hidden="true">
+            <circle cx="240" cy="57" r="32" fill="none" stroke="currentColor" stroke-width="12" />
+            <circle class="brand-o-center" cx="240" cy="57" r="6" fill="var(--brand-accent)" />
+            <g class="brand-hands">
+              <path class="brand-hand brand-hand-long" d="M240 57 L270 35" stroke="var(--brand-accent)" stroke-width="7" stroke-linecap="round" />
+              <path class="brand-hand brand-hand-short" d="M240 57 L226 28" stroke="var(--brand-accent)" stroke-width="7" stroke-linecap="round" />
+            </g>
+            <path d="M240 25 A32 32 0 0 1 272 57" stroke="var(--brand-accent)" stroke-width="7" fill="none" stroke-linecap="round" />
+          </g>
+        </svg>
+        <div class="app-subtitle" id="appSubtitle"></div>
       </div>
       <nav class="tab-bar tab-switch" id="tabBar">
         <button class="tab tab-free" id="freeTaskTab" data-tab="free" onclick="setFreeTask()" title="Tâche libre">∞</button>
@@ -53,142 +67,142 @@
     ════════════════════════════════ -->
     <div class="tab-content active" id="tab-timer">
 
-      <!-- PiP overlay -->
-      <div class="pip-overlay" id="pipOverlay" style="display:none" onclick="toggleTimer()">
-        <div class="pip-time" id="pipTime">25:00</div>
-        <div class="pip-mode" id="pipMode">Pomodoro</div>
-        <button class="pip-close" onclick="event.stopPropagation();closePip()" title="Fermer">×</button>
-      </div>
+      <div class="timer-layout" id="timerLayout">
+        <div class="timer-widgets timer-widgets-left">
+          <!-- Mode cards -->
+          <div class="mode-cards fade-up">
+            <button class="mode-card active" data-mode="pomodoro" onclick="setMode('pomodoro')">
+              <span class="mode-label">Pomodoro</span>
+              <span class="mode-time"><span id="durCard-pomodoro">25</span>m</span>
+              <span class="mode-card-badge" id="pomBadgeDisplay" onclick="event.stopPropagation();activatePomBadge()"><span id="durCard-pomBadge">30</span></span>
+            </button>
+            <button class="mode-card" data-mode="short" onclick="setMode('short')">
+              <span class="mode-label">Short Break</span>
+              <span class="mode-time"><span id="durCard-short">5</span>m</span>
+            </button>
+            <button class="mode-card" data-mode="long" onclick="setMode('long')">
+              <span class="mode-label">Long Break</span>
+              <span class="mode-time"><span id="durCard-long">15</span>m</span>
+            </button>
+          </div>
+        </div>
 
-      <!-- Timer ring -->
-      <div class="timer-container">
-        <div class="timer-ring-wrap ring-idle" id="timerRingWrap" onclick="toggleTimer()">
-          <svg class="timer-ring" id="timerRingSvg" viewBox="0 0 300 300">
-            <circle class="ring-bg"       cx="150" cy="150" r="130"/>
-            <circle class="ring-progress" id="ringProgress" cx="150" cy="150" r="130"
-              stroke-dasharray="816.8" stroke-dashoffset="0"/>
-          </svg>
-          <div class="timer-inner">
-            <div class="timer-mode-label" id="timerModeLabel">Pomodoro</div>
-            <div class="timer-display"    id="timerDisplay">25:00</div>
+        <div class="timer-core">
+          <!-- Timer ring -->
+          <div class="timer-container">
+            <div class="timer-ring-wrap ring-idle" id="timerRingWrap" onclick="toggleTimer()">
+              <svg class="timer-ring" id="timerRingSvg" viewBox="0 0 300 300">
+                <circle class="ring-bg"       cx="150" cy="150" r="130"/>
+                <circle class="ring-progress" id="ringProgress" cx="150" cy="150" r="130"
+                  stroke-dasharray="816.8" stroke-dashoffset="0"/>
+              </svg>
+              <div class="timer-inner">
+                <div class="timer-mode-label" id="timerModeLabel">Pomodoro</div>
+                <div class="timer-display"    id="timerDisplay">25:00</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Controls (visible only when running, right below the ring) -->
+          <div class="timer-controls" id="timerControls">
+            <button class="control-btn secondary" onclick="resetTimer()" title="Réinitialiser">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+            </button>
+            <button class="control-btn primary" id="mainBtn" onclick="toggleTimer()">
+              <svg id="playIcon"  viewBox="0 0 24 24" fill="currentColor"><polygon points="7,4 20,12 7,20"/></svg>
+              <svg id="pauseIcon" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+                <rect x="6"  y="4" width="4" height="16" rx="1"/>
+                <rect x="14" y="4" width="4" height="16" rx="1"/>
+              </svg>
+            </button>
+            <button class="control-btn secondary" onclick="skipTimer()" title="Passer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="tap-hint" id="tapHint">Appuie pour lancer</div>
+          <div class="timer-session-count" id="sessionDots"></div>
+        </div>
+
+        <div class="timer-widgets timer-widgets-right">
+          <div class="subject-quick-wrap">
+            <div class="subject-quick-header">
+              <div class="subject-quick-title">Matiere</div>
+              <button class="subject-all-btn" onclick="toggleAllTasksPanel()">Toutes ›</button>
+            </div>
+            <div class="subject-quick" id="subjectQuick"></div>
+          </div>
+
+          <!-- All Tasks Panel -->
+          <div class="all-tasks-panel" id="allTasksPanel">
+            <div class="all-tasks-inner" id="allTasksInner"></div>
+          </div>
+
+          <button class="personalize-link" id="personalizeToggle" onclick="togglePersonalize()">Personnaliser ›</button>
+
+          <div class="mini-settings" id="miniSettings">
+            <div class="mini-row">
+              <div class="mini-label">Travail <span>min</span></div>
+              <div class="mini-stepper">
+                <button onclick="changeDuration('pomodoro',-1)">−</button>
+                <span id="dur-pomodoro">25</span>
+                <button onclick="changeDuration('pomodoro',1)">+</button>
+              </div>
+            </div>
+            <div class="mini-row">
+              <div class="mini-label">Pause <span>min</span></div>
+              <div class="mini-stepper">
+                <button onclick="changeDuration('short',-1)">−</button>
+                <span id="dur-short">5</span>
+                <button onclick="changeDuration('short',1)">+</button>
+              </div>
+            </div>
+            <div class="mini-row">
+              <div class="mini-label">Tours</div>
+              <div class="mini-stepper">
+                <button onclick="changeDuration('sessions',-1)">−</button>
+                <span id="dur-sessions">4</span>
+                <button onclick="changeDuration('sessions',1)">+</button>
+              </div>
+            </div>
+            <div class="mini-row">
+              <div class="mini-label">Badge <span>min</span></div>
+              <div class="mini-stepper">
+                <button onclick="changeDuration('pomBadge',-1)">−</button>
+                <span id="dur-pomBadge">30</span>
+                <button onclick="changeDuration('pomBadge',1)">+</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Controls (visible only when running, right below the ring) -->
-      <div class="timer-controls" id="timerControls">
-        <button class="control-btn secondary" onclick="resetTimer()" title="Réinitialiser">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-            <path d="M3 3v5h5"/>
-          </svg>
-        </button>
-        <button class="control-btn primary" id="mainBtn" onclick="toggleTimer()">
-          <svg id="playIcon"  viewBox="0 0 24 24" fill="currentColor"><polygon points="7,4 20,12 7,20"/></svg>
-          <svg id="pauseIcon" viewBox="0 0 24 24" fill="currentColor" style="display:none">
-            <rect x="6"  y="4" width="4" height="16" rx="1"/>
-            <rect x="14" y="4" width="4" height="16" rx="1"/>
-          </svg>
-        </button>
-        <button class="control-btn secondary" onclick="skipTimer()" title="Passer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20"/>
-          </svg>
-        </button>
-      </div>
-
-      <button class="pip-btn" id="pipBtn" onclick="openPip()" title="Mini timer">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="15" rx="2"/><path d="M17 2l5 5-5 5"/><path d="M7 2L2 7l5 5"/></svg>
-      </button>
-      <div class="tap-hint" id="tapHint">Appuie pour lancer</div>
-      <div class="timer-session-count" id="sessionDots"></div>
-
-      <!-- Mode cards -->
-      <div class="mode-cards fade-up">
-        <button class="mode-card active" data-mode="pomodoro" onclick="setMode('pomodoro')">
-          <span class="mode-label">Pomodoro</span>
-          <span class="mode-time"><span id="durCard-pomodoro">25</span>m</span>
-          <span class="mode-card-badge" id="pomBadgeDisplay" onclick="event.stopPropagation();activatePomBadge()"><span id="durCard-pomBadge">30</span></span>
-        </button>
-        <button class="mode-card" data-mode="short" onclick="setMode('short')">
-          <span class="mode-label">Short Break</span>
-          <span class="mode-time"><span id="durCard-short">5</span>m</span>
-        </button>
-        <button class="mode-card" data-mode="long" onclick="setMode('long')">
-          <span class="mode-label">Long Break</span>
-          <span class="mode-time"><span id="durCard-long">15</span>m</span>
-        </button>
-      </div>
-
-      <div class="subject-quick-wrap">
-        <div class="subject-quick-header">
-          <div class="subject-quick-title">Matiere</div>
-          <button class="subject-all-btn" onclick="toggleAllTasksPanel()">Toutes ›</button>
+      <!-- Active task pill (reste sous le chrono, même en layout cotes) -->
+      <div class="timer-bottom-task">
+        <div class="active-task-banner focus-pill" id="activeTaskBanner" style="display:none">
+          <div class="active-task-dot" id="activeTaskDot" onclick="toggleTimer()" title="Lancer"></div>
+          <div class="focus-pill-info">
+            <div class="focus-pill-title" id="bannerTask">—</div>
+            <div class="focus-pill-sub" id="bannerSubject">—</div>
+            <div class="focus-pill-links" id="activeTaskLinks"></div>
+          </div>
+          <button class="banner-edit-btn" onclick="openEditTaskModal(state.activeTaskId)" title="Modifier">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+          <button class="active-task-clear" onclick="clearActiveTask()">✕</button>
         </div>
-        <div class="subject-quick" id="subjectQuick"></div>
-      </div>
-
-      <!-- All Tasks Panel -->
-      <div class="all-tasks-panel" id="allTasksPanel">
-        <div class="all-tasks-inner" id="allTasksInner"></div>
-      </div>
-
-      <!-- Active task pill (apparaît au-dessus de tâche libre quand matière/tâche active) -->
-      <div class="active-task-banner focus-pill" id="activeTaskBanner" style="display:none">
-        <div class="active-task-dot" id="activeTaskDot" onclick="toggleTimer()" title="Lancer"></div>
-        <div class="focus-pill-info">
-          <div class="focus-pill-title" id="bannerTask">—</div>
-          <div class="focus-pill-sub" id="bannerSubject">—</div>
-          <div class="focus-pill-links" id="activeTaskLinks"></div>
-        </div>
-        <button class="banner-edit-btn" onclick="openEditTaskModal(state.activeTaskId)" title="Modifier">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-        </button>
-        <button class="active-task-clear" onclick="clearActiveTask()">✕</button>
       </div>
 
 
       <div class="timer-bottom-spacer"></div>
-
-      <button class="personalize-link" id="personalizeToggle" onclick="togglePersonalize()">Personnaliser ›</button>
-
-      <div class="mini-settings" id="miniSettings">
-        <div class="mini-row">
-          <div class="mini-label">Travail <span>min</span></div>
-          <div class="mini-stepper">
-            <button onclick="changeDuration('pomodoro',-1)">−</button>
-            <span id="dur-pomodoro">25</span>
-            <button onclick="changeDuration('pomodoro',1)">+</button>
-          </div>
-        </div>
-        <div class="mini-row">
-          <div class="mini-label">Pause <span>min</span></div>
-          <div class="mini-stepper">
-            <button onclick="changeDuration('short',-1)">−</button>
-            <span id="dur-short">5</span>
-            <button onclick="changeDuration('short',1)">+</button>
-          </div>
-        </div>
-        <div class="mini-row">
-          <div class="mini-label">Tours</div>
-          <div class="mini-stepper">
-            <button onclick="changeDuration('sessions',-1)">−</button>
-            <span id="dur-sessions">4</span>
-            <button onclick="changeDuration('sessions',1)">+</button>
-          </div>
-        </div>
-        <div class="mini-row">
-          <div class="mini-label">Badge <span>min</span></div>
-          <div class="mini-stepper">
-            <button onclick="changeDuration('pomBadge',-1)">−</button>
-            <span id="dur-pomBadge">30</span>
-            <button onclick="changeDuration('pomBadge',1)">+</button>
-          </div>
-        </div>
-      </div>
 
 
     </div><!-- /tab-timer -->
@@ -511,6 +525,13 @@
               <button type="button" class="settings-choice" data-theme="paper" onclick="setThemePreset('paper')">Paper</button>
               <button type="button" class="settings-choice" data-theme="sunrise" onclick="setThemePreset('sunrise')">Sunrise</button>
               <button type="button" class="settings-choice" data-theme="graphite" onclick="setThemePreset('graphite')">Graphite</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Disposition des widgets</label>
+            <div class="settings-choice-grid" id="timerLayoutChoices">
+              <button type="button" class="settings-choice" data-layout="bottom" onclick="setTimerLayout('bottom')">Bas du chrono</button>
+              <button type="button" class="settings-choice" data-layout="sides" onclick="setTimerLayout('sides')">Sur les cotes</button>
             </div>
           </div>
           <div class="form-group">

@@ -115,6 +115,7 @@ const DEFAULT_PREFS = {
   showOrbs: true,
   compact: false,
   soundEnabled: true,
+  timerLayout: 'bottom',
   defaultTab: 'timer',
   hiddenTabs: [],
   tabOrder: DEFAULT_TAB_ORDER.slice(),
@@ -151,6 +152,7 @@ let state = {
     showOrbs: true,
     compact: false,
     soundEnabled: true,
+    timerLayout: 'bottom',
     defaultTab: 'timer',
     hiddenTabs: [],
     tabOrder: DEFAULT_TAB_ORDER.slice(),
@@ -168,6 +170,9 @@ let editingSubjectId = null;
 let taskFilter = 'all'; // 'all' | 'today' (linked to calendar)
 let dragSrcTaskId = null;
 let dragSrcTab = null;
+let logoTargetAngle = 0;
+let logoCurrentAngle = 0;
+let logoAnimRunning = false;
 
 const COLORS = [
   '#FF3B30','#FF9500','#FFCC00','#34C759',
@@ -263,6 +268,7 @@ function normalizePrefs(input = {}) {
   prefs.showOrbs = input.showOrbs !== false;
   prefs.compact = !!input.compact;
   prefs.soundEnabled = input.soundEnabled !== false;
+  prefs.timerLayout = input.timerLayout === 'sides' ? 'sides' : 'bottom';
   prefs.defaultTab = DEFAULT_TAB_ORDER.includes(prefs.defaultTab) ? prefs.defaultTab : DEFAULT_PREFS.defaultTab;
   prefs.hiddenTabs = Array.isArray(input.hiddenTabs)
     ? input.hiddenTabs.filter(tab => DEFAULT_TAB_ORDER.includes(tab) && tab !== 'timer' && tab !== prefs.defaultTab)
@@ -334,6 +340,13 @@ function applyThemeVars() {
   document.title = `${prefs.appName} — Pomodoro & Planner`;
 }
 
+function applyTimerLayout() {
+  const prefs = state.prefs || DEFAULT_PREFS;
+  const layout = prefs.timerLayout === 'sides' ? 'sides' : 'bottom';
+  const tabTimer = document.getElementById('tab-timer');
+  if (tabTimer) tabTimer.dataset.layout = layout;
+}
+
 function syncPreferenceUI() {
   const prefs = state.prefs || DEFAULT_PREFS;
   const titleEl = document.getElementById('appTitle');
@@ -341,6 +354,7 @@ function syncPreferenceUI() {
   const nameInput = document.getElementById('appNameInput');
   const subtitleInput = document.getElementById('appSubtitleInput');
   const themeChoices = document.querySelectorAll('#themeChoices .settings-choice');
+  const layoutChoices = document.querySelectorAll('#timerLayoutChoices .settings-choice');
   const accentInput = document.getElementById('accentInput');
   const showOrbsToggle = document.getElementById('showOrbsToggle');
   const compactToggle = document.getElementById('compactToggle');
@@ -348,9 +362,7 @@ function syncPreferenceUI() {
   const defaultTabSelect = document.getElementById('defaultTabSelect');
 
   if (titleEl) titleEl.textContent = prefs.appName;
-  if (subtitleEl) subtitleEl.textContent = prefs.subtitleMode === 'custom' && prefs.appSubtitle.trim()
-    ? prefs.appSubtitle.trim()
-    : formatHeaderSubtitle();
+  if (subtitleEl) subtitleEl.textContent = formatHeaderSubtitle();
   if (nameInput && nameInput.value !== prefs.appName) nameInput.value = prefs.appName;
   if (subtitleInput) {
     const desired = prefs.subtitleMode === 'custom' ? prefs.appSubtitle : '';
@@ -364,6 +376,7 @@ function syncPreferenceUI() {
   if (soundToggle) soundToggle.checked = prefs.soundEnabled;
   if (defaultTabSelect && defaultTabSelect.value !== prefs.defaultTab) defaultTabSelect.value = prefs.defaultTab;
   themeChoices.forEach(btn => btn.classList.toggle('active', btn.dataset.theme === prefs.theme));
+  layoutChoices.forEach(btn => btn.classList.toggle('active', btn.dataset.layout === prefs.timerLayout));
   renderAccentSwatches();
 
   const chips = document.querySelectorAll('.tab[data-tab]');
@@ -380,6 +393,7 @@ function syncPreferenceUI() {
 
 function applyPreferences() {
   applyThemeVars();
+  applyTimerLayout();
   syncPreferenceUI();
   applyTabVisibility();
   applyTabOrder();
@@ -484,6 +498,107 @@ function setSoundEnabled(checked) {
   save();
 }
 
+function setTimerLayout(layout) {
+  state.prefs.timerLayout = layout === 'sides' ? 'sides' : 'bottom';
+  applyTimerLayout();
+  syncPreferenceUI();
+  save();
+}
+
+function launchAnimations() {
+  // Navbar shimmer avec couleur accent
+  const tabBar = document.querySelector('.tab-bar');
+  if (tabBar) {
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#3a6cff';
+    const base = 'rgba(210,214,222,.7)';
+    tabBar.style.background = `linear-gradient(90deg, ${base} 0%, ${base} 40%, ${accent}33 50%, ${base} 60%, ${base} 100%)`;
+    tabBar.style.backgroundSize = '400% 100%';
+    tabBar.style.animation = 'nav-shimmer 1.2s ease-in-out forwards';
+    tabBar.addEventListener('animationend', () => {
+      tabBar.style.background = '';
+      tabBar.style.backgroundSize = '';
+      tabBar.style.animation = '';
+    }, { once: true });
+  }
+
+  // Widgets fadeUp en cascade
+  const widgets = [
+    document.querySelector('.app-brand'),
+    document.querySelector('.header-gear-btn'),
+    document.querySelector('.mode-cards'),
+    document.querySelector('.timer-ring-wrap'),
+    document.querySelector('.tap-hint'),
+    document.querySelector('.subject-quick-wrap'),
+    document.querySelector('#personalizeToggle'),
+  ];
+  widgets.forEach((el, i) => {
+    if (!el) return;
+    el.classList.add('launch-fade');
+    el.style.animationDelay = `${i * 60}ms`;
+    el.addEventListener('animationend', () => {
+      el.classList.remove('launch-fade');
+      el.style.animationDelay = '';
+      el.style.opacity = '';
+    }, { once: true });
+  });
+}
+
+function triggerBrandGlow() {
+  const brandO = document.querySelector('.brand-o');
+  if (!brandO) return;
+  brandO.getAnimations().forEach(a => a.cancel());
+  const glowColor = getComputedStyle(document.documentElement).getPropertyValue('--brand-accent').trim() || '#c9a24b';
+  brandO.animate([
+    { filter: `drop-shadow(0 0 0px ${glowColor})` },
+    { filter: `drop-shadow(0 0 8px ${glowColor})` },
+    { filter: `drop-shadow(0 0 0px ${glowColor})` }
+  ], { duration: 2400, easing: 'ease-out', fill: 'none', offset: [0, 0.25, 1] });
+}
+
+function setupLogoPointer() {
+  const logo = document.querySelector('.brand-logo');
+  const hands = document.querySelector('.brand-hands');
+  const centerDot = document.querySelector('.brand-o-center');
+  if (!logo || !hands || !centerDot) return;
+
+  const baseAngle = -35; // matches the static hand direction
+  const maxDistance = 140;
+
+  const updateTarget = (event) => {
+    const rect = centerDot.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const dx = event.clientX - centerX;
+    const dy = event.clientY - centerY;
+    const distance = Math.hypot(dx, dy);
+    if (distance <= maxDistance) {
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      logoTargetAngle = angle - baseAngle;
+    } else {
+      logoTargetAngle = 0;
+    }
+  };
+
+  document.addEventListener('pointermove', updateTarget, { passive: true });
+  logo.addEventListener('pointerleave', () => { logoTargetAngle = 0; });
+  window.addEventListener('blur', () => { logoTargetAngle = 0; });
+
+  if (logoAnimRunning) return;
+  logoAnimRunning = true;
+  const step = () => {
+    // Normalize both angles to [-180, 180] before computing delta
+    const cur = ((logoCurrentAngle % 360) + 360) % 360;
+    const tgt = ((logoTargetAngle  % 360) + 360) % 360;
+    let delta = tgt - cur;
+    if (delta > 180)  delta -= 360;
+    if (delta < -180) delta += 360;
+    logoCurrentAngle = cur + delta * 0.08;
+    hands.setAttribute('transform', `rotate(${logoCurrentAngle.toFixed(2)} 240 57)`);
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function setDefaultTab(tab) {
   if (!DEFAULT_TAB_ORDER.includes(tab)) return;
   state.prefs.defaultTab = tab;
@@ -543,11 +658,6 @@ function importCustomization() {
 function updateClock() {
   const subtitleEl = document.getElementById('appSubtitle');
   if (!subtitleEl) return;
-  const prefs = state.prefs || DEFAULT_PREFS;
-  if (prefs.subtitleMode === 'custom' && prefs.appSubtitle.trim()) {
-    subtitleEl.textContent = prefs.appSubtitle.trim();
-    return;
-  }
   subtitleEl.textContent = formatHeaderSubtitle();
 }
 
@@ -748,6 +858,7 @@ function scrollToTimer(delay = 80) {
 }
 
 function startTimer() {
+  triggerBrandGlow();
   state.running = true;
   document.getElementById('playIcon').style.display  = 'none';
   document.getElementById('pauseIcon').style.display = '';
@@ -775,6 +886,7 @@ function startTimer() {
 }
 
 function pauseTimer() {
+  triggerBrandGlow();
   syncTimerFromClock();
   state.running = false;
   document.getElementById('playIcon').style.display  = '';
@@ -933,7 +1045,8 @@ function renderTimer() {
     const m = pipWin.document.getElementById('pip-mode');
     if (t) t.textContent = display;
     if (m) m.textContent = document.getElementById('timerModeLabel').textContent;
-    pipWin.document.body.style.background = state.running ? '#0f0f1a' : '#111118';
+    const pill = pipWin.document.querySelector('.pip-pill');
+    if (pill) pill.style.background = state.running ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.12)';
   }
 }
 
@@ -1005,7 +1118,7 @@ async function openPip() {
   // Document PiP (Chrome 116+) — vraie fenêtre HTML
   if (window.documentPictureInPicture) {
     try {
-      pipWin = await window.documentPictureInPicture.requestWindow({ width: 200, height: 160 });
+      pipWin = await window.documentPictureInPicture.requestWindow({ width: 180, height: 180 });
 
       // Copier les styles
       [...document.styleSheets].forEach(ss => {
@@ -1020,17 +1133,34 @@ async function openPip() {
       const style = pipWin.document.createElement('style');
       style.textContent = `
         * { margin:0; padding:0; box-sizing:border-box; }
+        html, body {
+          width: 100%; height: 100%;
+          background: transparent;
+        }
         body {
-          background: #111118;
-          display: flex; flex-direction: column;
-          align-items: center; justify-content: center;
-          height: 100vh; font-family: system-ui, sans-serif;
+          display: flex; align-items: center; justify-content: center;
+          font-family: system-ui, sans-serif;
           cursor: pointer; user-select: none;
         }
-        #pip-mode { font-size: 11px; font-weight: 600; color: rgba(255,255,255,.5); margin-bottom: 4px; }
-        #pip-time { font-size: 38px; font-weight: 700; color: #fff; line-height: 1; }
+        .pip-pill {
+          width: 160px; height: 160px;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.15);
+          backdrop-filter: blur(24px) saturate(1.8);
+          -webkit-backdrop-filter: blur(24px) saturate(1.8);
+          border: 1.5px solid rgba(255,255,255,0.3);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+          display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+          gap: 2px;
+        }
+        #pip-mode { font-size: 11px; font-weight: 600; color: rgba(255,255,255,.7); letter-spacing: .5px; }
+        #pip-time { font-size: 34px; font-weight: 700; color: #fff; line-height: 1; }
       `;
       pipWin.document.head.appendChild(style);
+
+      const pill = pipWin.document.createElement('div');
+      pill.className = 'pip-pill';
 
       const modeEl = pipWin.document.createElement('div');
       modeEl.id = 'pip-mode';
@@ -1040,8 +1170,9 @@ async function openPip() {
       timeEl.id = 'pip-time';
       timeEl.textContent = document.getElementById('timerDisplay').textContent;
 
-      pipWin.document.body.appendChild(modeEl);
-      pipWin.document.body.appendChild(timeEl);
+      pill.appendChild(modeEl);
+      pill.appendChild(timeEl);
+      pipWin.document.body.appendChild(pill);
       pipWin.document.body.addEventListener('click', toggleTimer);
       pipWin.addEventListener('pagehide', closePip);
       return;
@@ -1431,6 +1562,22 @@ function toggleTaskPopover(subjectId, chip, isAutoOpen = false) {
   const taskList = document.createElement('div');
   taskList.className = 'chip-task-list';
 
+  // Position the popup below the chip, anchored to the subject-quick container
+  const container = chip.closest('.subject-quick');
+  if (container) {
+    const chipRect = chip.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const popupWidth = 240;
+    let leftOffset = chipRect.left - containerRect.left;
+    // Clamp so popup doesn't overflow the right edge of the viewport
+    const rightEdge = chipRect.left + popupWidth;
+    if (rightEdge > window.innerWidth - 8) {
+      leftOffset -= rightEdge - (window.innerWidth - 8);
+    }
+    taskList.style.left = Math.max(0, leftOffset) + 'px';
+    taskList.style.top = (chipRect.bottom - containerRect.top + 6) + 'px';
+  }
+
   if (tasks.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'chip-task-item';
@@ -1460,7 +1607,7 @@ function toggleTaskPopover(subjectId, chip, isAutoOpen = false) {
   footer.onclick = (e) => { e.stopPropagation(); closeAllPopovers(); openSubjectFromHome(subjectId); };
   taskList.appendChild(footer);
 
-  chip.appendChild(taskList);
+  (container || chip).appendChild(taskList);
 
   if (!isAutoOpen) {
     setTimeout(() => {
@@ -3313,6 +3460,9 @@ function init() {
   renderSubjectQuickSelect();
   renderFreeTaskSubtitle();
   updateFreeTaskActive();
+  setupLogoPointer();
+  triggerBrandGlow();
+  launchAnimations();
   spRenderPresets();
   const lastSp = localStorage.getItem('focus_spotify_url');
   if (lastSp) {
