@@ -137,6 +137,10 @@ body.compact-ui .tab-content {
   0%   { opacity: 0; transform: translateY(18px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+@keyframes slideUpIn {
+  0%   { opacity: 0; transform: translateY(32px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
 @keyframes breathe {
   0%,100% { transform: scale(1); }
   50%      { transform: scale(1.01); }
@@ -217,6 +221,9 @@ body.compact-ui .tab-content {
   font-size: 72px;
   letter-spacing: 6px;
   fill: currentColor;
+}
+.brand-logo .brand-o-center {
+  filter: drop-shadow(0 0 2px var(--brand-accent));
 }
 .app-title { display: none; }
 .app-subtitle { font-size: 11px; color: var(--text2); white-space: nowrap; }
@@ -332,7 +339,6 @@ button.tab.tab-free.active {
   background: rgba(255,255,255,.82);
   border: 1px solid rgba(255,255,255,.9);
   box-shadow: 0 10px 22px rgba(0,0,0,.06);
-  animation: fadeUp .4s ease both;
 }
 .focus-pill-clickable { cursor: pointer; }
 .focus-pill-clickable:hover { box-shadow: 0 12px 24px rgba(0,0,0,.08); }
@@ -367,7 +373,7 @@ button.tab.tab-free.active {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(0,0,0,.06);
+  background: transparent;
   border: none;
   flex-shrink: 0;
   position: relative;
@@ -386,19 +392,15 @@ button.tab.tab-free.active {
   border: 1.5px solid rgba(0,0,0,.15);
 }
 .active-task-dot.running {
-  background: var(--accent-soft-2);
+  background: transparent;
 }
 .active-task-dot.running::before {
   background: var(--accent);
   border-color: var(--accent);
+  filter: drop-shadow(0 0 3px var(--accent));
 }
 .active-task-dot.running::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1.5px solid rgba(var(--accent-rgb),.3);
-  animation: pulse-once 1.2s ease-out 1;
+  content: none;
 }
 .focus-pill-links { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
 .focus-pill-links .task-link { font-size: 11px; padding: 2px 8px; }
@@ -572,52 +574,12 @@ button.tab.tab-free.active {
   gap: 22px;
   width: 100%;
   opacity: 0;
-  transform: translateY(10px);
   pointer-events: none;
-  transition: opacity .35s cubic-bezier(.23,1,.32,1) .1s,
-              transform .35s cubic-bezier(.23,1,.32,1) .1s,
-              max-height .35s cubic-bezier(.23,1,.32,1),
-              margin-bottom .35s cubic-bezier(.23,1,.32,1);
-  max-height: 0;
-  overflow: hidden;
-  margin-bottom: 0;
-}
-
-/* ── Elements that hide when running ── */
-.mode-cards,
-#personalizeToggle,
-#miniSettings,
-.timer-session-count,
-#tapHint {
-  transition: opacity .4s ease, transform .4s ease, max-height .45s cubic-bezier(.4,0,.2,1), margin-bottom .45s cubic-bezier(.4,0,.2,1);
-  overflow: hidden;
-}
-
-.subject-quick-wrap {
-  transition: opacity .4s ease, transform .4s ease, max-height .45s cubic-bezier(.4,0,.2,1), margin-bottom .45s cubic-bezier(.4,0,.2,1);
-  overflow: visible;
+  transition: opacity .4s ease;
+  display: none;
 }
 
 /* ── Running State ── */
-body.is-started .timer-controls {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-  max-height: 100px;
-  margin-bottom: 24px;
-}
-body.is-running .mode-cards,
-body.is-running .subject-quick-wrap,
-body.is-running #personalizeToggle,
-body.is-running #miniSettings,
-body.is-running .timer-session-count,
-body.is-running #tapHint {
-  opacity: 0;
-  transform: translateY(-8px);
-  pointer-events: none;
-  max-height: 0;
-  margin-bottom: 0;
-}
 
 /* ── Mode Cards ── */
 .mode-cards {
@@ -1383,7 +1345,7 @@ body[data-mode="long"]   .timer-display        { color: #141414; }
 
 .task-check {
   width: 22px; height: 22px; border-radius: 50%;
-  border: 2px solid rgba(120,120,128,.3);
+  border: 2px solid transparent;
   background: none; cursor: pointer; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   -webkit-tap-highlight-color: transparent;

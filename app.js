@@ -854,18 +854,90 @@ function scrollToTimer(delay = 80) {
     const target = ring.getBoundingClientRect().top + window.scrollY - (window.innerHeight / 2) + (ring.offsetHeight / 2);
     const start = window.scrollY;
     const distance = target - start;
-    const duration = 700;
+    const duration = 1100;
     let startTime = null;
-    function easeIn(t) { return t * t * t; }
+    function easeInOut(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
     function step(ts) {
       if (!startTime) startTime = ts;
       const elapsed = ts - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      window.scrollTo(0, start + distance * easeIn(progress));
+      window.scrollTo(0, start + distance * easeInOut(progress));
       if (progress < 1) requestAnimationFrame(step);
     }
     requestAnimationFrame(step);
   }, delay);
+}
+
+const WIDGET_SELECTORS = '.mode-cards, .subject-quick-wrap, #personalizeToggle, #miniSettings, .timer-session-count, #tapHint';
+
+function hideWidgets() {
+  const els = [...document.querySelectorAll(WIDGET_SELECTORS)];
+  const banner = document.getElementById('activeTaskBanner');
+
+  // Force full visibility first, then measure
+  els.forEach(el => {
+    el.classList.remove('fade-up');
+    el.style.animation = 'none';
+    el.style.transition = 'none';
+    el.style.opacity = '1';
+    el.style.height = '';
+    el.style.marginBottom = '';
+    el.style.overflow = 'hidden';
+    el.style.pointerEvents = 'none';
+  });
+
+  // Wait one frame so browser applies the reset before we measure
+  requestAnimationFrame(() => {
+    els.forEach(el => {
+      el.style.height = el.offsetHeight + 'px';
+      el.style.marginBottom = getComputedStyle(el).marginBottom;
+    });
+
+    // After glow (~400ms), fade + collapse simultaneously
+    setTimeout(() => {
+      if (!document.body.classList.contains('is-running')) return;
+      els.forEach(el => {
+        el.style.transition = 'opacity 0.5s ease, height 0.5s cubic-bezier(.4,0,.2,1), margin-bottom 0.5s cubic-bezier(.4,0,.2,1)';
+        el.style.opacity = '0';
+        el.style.height = '0';
+        el.style.marginBottom = '0';
+      });
+
+      // Banner slides up in sync with collapse + scroll
+      if (banner && banner.style.display !== 'none') {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          banner.style.transition = 'transform 1.1s cubic-bezier(.23,1,.32,1)';
+          banner.style.transform = 'translateY(-40px)';
+          setTimeout(() => {
+            if (!document.body.classList.contains('is-running')) return;
+            banner.style.transition = 'transform 1.1s cubic-bezier(.23,1,.32,1)';
+            banner.style.transform = 'translateY(0)';
+          }, 50);
+        }));
+      }
+    }, 400);
+  });
+}
+
+function showWidgets() {
+  const els = [...document.querySelectorAll(WIDGET_SELECTORS)];
+  els.forEach(el => {
+    el.style.transition = 'none';
+    el.style.height = '';
+    el.style.marginBottom = '';
+    el.style.overflow = '';
+    el.style.opacity = '0';
+    el.style.display = '';
+    el.style.pointerEvents = '';
+  });
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      els.forEach(el => {
+        el.style.transition = 'opacity 0.35s ease';
+        el.style.opacity = '1';
+      });
+    });
+  });
 }
 
 function startTimer() {
@@ -887,7 +959,24 @@ function startTimer() {
   timerStartedAt = Date.now();
   timerBaseLeft  = state.timeLeft;
   timerInterval = setInterval(tick, 500);
-  scrollToTimer();
+  hideWidgets();
+  // Fade in controls right after glow, before scroll
+  const ctrl = document.getElementById('timerControls');
+  if (ctrl) {
+    setTimeout(() => {
+      if (!document.body.classList.contains('is-running')) return;
+      ctrl.style.display = 'flex';
+      ctrl.style.transition = 'none';
+      ctrl.style.opacity = '0';
+      ctrl.style.pointerEvents = 'none';
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        ctrl.style.transition = 'opacity 0.4s ease';
+        ctrl.style.opacity = '1';
+        ctrl.style.pointerEvents = 'auto';
+      }));
+    }, 420);
+  }
+  scrollToTimer(900);
   const allPanel = document.getElementById('allTasksPanel');
   if (allPanel && allPanel.classList.contains('open')) {
     allPanel.classList.remove('open');
@@ -906,6 +995,16 @@ function pauseTimer() {
   wrap.classList.add('ring-idle');
   wrap.classList.remove('breathe');
   document.body.classList.remove('is-running');
+  showWidgets();
+  const banner = document.getElementById('activeTaskBanner');
+  if (banner) { banner.style.transition = 'none'; banner.style.transform = ''; }
+  const ctrl = document.getElementById('timerControls');
+  if (ctrl) {
+    ctrl.style.transition = 'opacity 0.3s ease';
+    ctrl.style.opacity = '0';
+    ctrl.style.pointerEvents = 'none';
+    setTimeout(() => { ctrl.style.display = 'none'; }, 320);
+  }
   const dot = document.getElementById('activeTaskDot');
   if (dot) dot.classList.remove('running');
   clearInterval(timerInterval);
@@ -982,6 +1081,7 @@ function onTimerComplete(natural) {
   document.getElementById('pauseIcon').style.display = 'none';
   document.body.classList.remove('is-running');
   document.body.classList.remove('is-started');
+  showWidgets();
   const dot = document.getElementById('activeTaskDot');
   if (dot) dot.classList.remove('running');
 
