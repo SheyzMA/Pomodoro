@@ -428,6 +428,14 @@
           <button onclick="changeEditPomodoros(1)">+</button>
         </div>
       </div>
+      <div class="edit-task-done-row">
+        <span class="edit-task-done-lbl">🍅 Faits</span>
+        <div class="stepper stepper-large">
+          <button onclick="changeEditDonePomodoros(-1)">−</button>
+          <span id="editTaskDonePomodoros">0</span>
+          <button onclick="changeEditDonePomodoros(1)">+</button>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal('editTaskModal')">Annuler</button>
         <button class="btn-primary" onclick="saveEditTask()">Enregistrer</button>

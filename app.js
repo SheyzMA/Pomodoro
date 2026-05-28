@@ -244,7 +244,18 @@ function load() {
     // Merge only non-timer state
     state.durations    = Object.assign({}, state.durations, s.durations || {});
     state.subjects     = s.subjects     || [];
-    state.tasks        = s.tasks        || [];
+    state.tasks        = (s.tasks || []).map(t => {
+      // Migrate legacy single-slot fields to calSlots array
+      if (!t.calSlots) {
+        t.calSlots = t.scheduledDate
+          ? [{ id: uid(), scheduledDate: t.scheduledDate, scheduledMinute: t.scheduledMinute || 0, calDurationMin: t.calDurationMin || null }]
+          : [];
+        delete t.scheduledDate;
+        delete t.scheduledMinute;
+        delete t.calDurationMin;
+      }
+      return t;
+    });
     state.log          = s.log          || [];
     state.todayPomodoros = s.todayPomodoros || 0;
     state.totalMinutes = s.totalMinutes || 0;
@@ -1858,6 +1869,7 @@ function openEditTaskModal(taskId) {
   document.getElementById('editTaskLinkMain').value = t.linkMain || '';
   document.getElementById('editTaskLinkCorrection').value = t.linkCorrection || '';
   document.getElementById('editTaskPomodoros').textContent = taskPomodoroCount;
+  document.getElementById('editTaskDonePomodoros').textContent = t.donePomodoros || 0;
   document.querySelectorAll('#editPriorityPicker .priority-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.p === taskPriority));
 
@@ -1880,6 +1892,12 @@ function changeEditPomodoros(d) {
   document.getElementById('editTaskPomodoros').textContent = taskPomodoroCount;
 }
 
+function changeEditDonePomodoros(d) {
+  const el = document.getElementById('editTaskDonePomodoros');
+  if (!el) return;
+  el.textContent = Math.max(0, Math.min(99, parseInt(el.textContent || '0') + d));
+}
+
 function saveEditTask() {
   const name = document.getElementById('editTaskName').value.trim();
   if (!name) { document.getElementById('editTaskName').focus(); return; }
@@ -1890,6 +1908,7 @@ function saveEditTask() {
   t.linkMain        = normalizeUrl(document.getElementById('editTaskLinkMain').value);
   t.linkCorrection  = normalizeUrl(document.getElementById('editTaskLinkCorrection').value);
   t.pomodoros       = taskPomodoroCount;
+  t.donePomodoros   = Math.max(0, parseInt(document.getElementById('editTaskDonePomodoros').textContent || '0'));
   t.priority        = taskPriority;
   editingTaskId = null;
   closeModal('editTaskModal');
@@ -2009,7 +2028,7 @@ function refreshCalendarIfActive() {
 }
 
 function taskIsScheduledOnDate(task, dateKey) {
-  return task.scheduledDate === dateKey;
+  return (task.calSlots || []).some(s => s.scheduledDate === dateKey);
 }
 
 function renderSubjects() {
@@ -2346,6 +2365,7 @@ let calView        = 7;  // 3 | 5 | 7
 let calDragTaskId  = null;
 let calDragOffsetY = 0;
 let calResizeTaskId   = null;
+let calResizeSlotId   = null;
 let calResizeStartY   = 0;
 let calResizeStartMin = 0;
 
@@ -2400,8 +2420,9 @@ function calMinToHHMM(min) {
   min = ((min % 1440) + 1440) % 1440;
   return `${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}`;
 }
-function calTaskDur(task) {
-  if (task.calDurationMin) return task.calDurationMin;
+function calTaskDur(task, slot) {
+  const dur = slot ? slot.calDurationMin : null;
+  if (dur) return dur;
   return Math.max(15, calSnap((task.pomodoros||1) * (state.durations.pomodoro||25)));
 }
 
@@ -2478,7 +2499,13 @@ function renderCalendar() {
   days.forEach(d => {
     const key      = calDateKey(d);
     const isToday  = key === todayKey;
-    const dayTasks = state.tasks.filter(t => t.scheduledDate === key);
+    // Collect (task, slot) pairs for this day
+    const daySlots = [];
+    state.tasks.forEach(t => {
+      (t.calSlots || []).forEach(slot => {
+        if (slot.scheduledDate === key) daySlots.push({ task: t, slot });
+      });
+    });
 
     const col = document.createElement('div');
     col.className = 'cal-col' + (isToday ? ' cal-col-today' : '');
@@ -2553,27 +2580,36 @@ function renderCalendar() {
       e.preventDefault();
       col.classList.remove('cal-col-dragover');
       col.querySelector('.cal-drop-ghost')?.remove();
-      const taskId = e.dataTransfer.getData('text/plain') || calDragTaskId;
-      if (!taskId) return;
+      const dragData = e.dataTransfer.getData('text/plain') || calDragTaskId;
+      if (!dragData) return;
+      // dragData format: "taskId" or "taskId:slotId"
+      const [taskId, slotId] = dragData.split(':');
       const task = state.tasks.find(t => t.id === taskId);
       if (!task) return;
       const rect = col.getBoundingClientRect();
       const snappedMin = Math.max(0, Math.min(1425, calPxToMin(e.clientY - rect.top - calDragOffsetY)));
-      task.scheduledDate   = key;
-      task.scheduledMinute = snappedMin;
+      if (slotId) {
+        // Move existing slot to new position
+        const slot = (task.calSlots || []).find(s => s.id === slotId);
+        if (slot) { slot.scheduledDate = key; slot.scheduledMinute = snappedMin; }
+      } else {
+        // New placement from sidebar — add a slot
+        if (!task.calSlots) task.calSlots = [];
+        task.calSlots.push({ id: uid(), scheduledDate: key, scheduledMinute: snappedMin, calDurationMin: null });
+      }
       save();
       renderCalendar();
     });
 
     // Chips
-    dayTasks.forEach(t => col.appendChild(buildCalChip(t, false)));
+    daySlots.forEach(({ task, slot }) => col.appendChild(buildCalChip(task, slot, false)));
     grid.appendChild(col);
   });
 
   // ── Unscheduled sidebar ──
   const unscheduledEl = document.getElementById('calUnscheduled');
   unscheduledEl.innerHTML = '';
-  const unscheduled = state.tasks.filter(t => !t.scheduledDate);
+  const unscheduled = state.tasks.filter(t => !t.calSlots || t.calSlots.length === 0);
 
   unscheduledEl.addEventListener('dragover', e => {
     e.preventDefault();
@@ -2585,12 +2621,16 @@ function renderCalendar() {
   unscheduledEl.addEventListener('drop', e => {
     e.preventDefault();
     unscheduledEl.classList.remove('cal-unsched-dragover');
-    const taskId = e.dataTransfer.getData('text/plain') || calDragTaskId;
-    if (!taskId) return;
+    const dragData = e.dataTransfer.getData('text/plain') || calDragTaskId;
+    if (!dragData) return;
+    const [taskId, slotId] = dragData.split(':');
     const task = state.tasks.find(t => t.id === taskId);
     if (!task) return;
-    delete task.scheduledDate;
-    delete task.scheduledMinute;
+    if (slotId) {
+      task.calSlots = (task.calSlots || []).filter(s => s.id !== slotId);
+    } else {
+      task.calSlots = [];
+    }
     save();
     renderCalendar();
   });
@@ -2652,7 +2692,7 @@ function renderCalendar() {
 
       const body = document.createElement('div');
       body.className = 'cal-folder-body';
-      tasks.forEach(t => body.appendChild(buildCalChip(t, true)));
+      tasks.forEach(t => body.appendChild(buildCalChip(t, null, true)));
 
       // Auto-open folder on dragover so user can drop chips into it
       body.addEventListener('dragover', e => {
@@ -2666,7 +2706,7 @@ function renderCalendar() {
     });
 
     // Orphan tasks (no subject) render as plain chips, no folder wrapper
-    orphans.forEach(t => unscheduledEl.appendChild(buildCalChip(t, true)));
+    orphans.forEach(t => unscheduledEl.appendChild(buildCalChip(t, null, true)));
   }
 
   // Scroll to 7 am first time
@@ -2678,15 +2718,17 @@ function renderCalendar() {
 }
 
 // ── Build chip ──
-function buildCalChip(task, sidebar) {
+function buildCalChip(task, slot, sidebar) {
   const subject  = state.subjects.find(s => s.id === task.subjectId);
   const color    = subject ? subject.color : '#8E8E93';
   const pct      = task.pomodoros > 0 ? Math.round((task.donePomodoros||0)/task.pomodoros*100) : 0;
   const isActive = state.activeTaskId === task.id;
-  const durMin   = calTaskDur(task);
-  const startMin = task.scheduledMinute || 0;
+  const durMin   = calTaskDur(task, slot);
+  const startMin = slot ? (slot.scheduledMinute || 0) : 0;
   const endMin   = startMin + durMin;
   const subLabel = subject ? `${subject.emoji||''} ${subject.name}`.trim() : '';
+  const slotId   = slot ? slot.id : null;
+  const dragKey  = slotId ? `${task.id}:${slotId}` : task.id;
 
   const chip = document.createElement('div');
   chip.className = ['cal-chip',
@@ -2696,6 +2738,7 @@ function buildCalChip(task, sidebar) {
   ].filter(Boolean).join(' ');
   chip.draggable = true;
   chip.dataset.taskId = task.id;
+  if (slotId) chip.dataset.slotId = slotId;
   chip.style.setProperty('--chip-color', color);
 
   if (!sidebar) {
@@ -2708,9 +2751,9 @@ function buildCalChip(task, sidebar) {
   chip.addEventListener('dragstart', e => {
     // Block drag when mousedown came from the resize handle
     if (e.target.closest && e.target.closest('.cal-chip-resize')) { e.preventDefault(); return; }
-    calDragTaskId  = task.id;
+    calDragTaskId  = dragKey;
     calDragOffsetY = sidebar ? 0 : (e.clientY - chip.getBoundingClientRect().top);
-    e.dataTransfer.setData('text/plain', task.id);
+    e.dataTransfer.setData('text/plain', dragKey);
     e.dataTransfer.effectAllowed = 'move';
     chip.classList.add('cal-chip-dragging');
   });
@@ -2741,7 +2784,7 @@ function buildCalChip(task, sidebar) {
   // Click = inline edit popover (not on resize, not on play btn)
   chip.addEventListener('click', e => {
     if (e.target.closest('.cal-chip-resize') || e.target.closest('.cal-chip-btn-play')) return;
-    calOpenInlineEdit(task.id, chip);
+    calOpenInlineEdit(task.id, slotId, chip);
   });
 
   // Resize handle
@@ -2752,8 +2795,9 @@ function buildCalChip(task, sidebar) {
       e.stopPropagation();
       chip.draggable    = false; // prevent drag while resizing
       calResizeTaskId   = task.id;
+      calResizeSlotId   = slotId;
       calResizeStartY   = e.clientY;
-      calResizeStartMin = calTaskDur(task);
+      calResizeStartMin = calTaskDur(task, slot);
       chip.classList.add('cal-chip-resizing');
       document.addEventListener('mousemove', calOnResizeMove);
       document.addEventListener('mouseup',   calOnResizeUp);
@@ -2767,14 +2811,17 @@ function buildCalChip(task, sidebar) {
 function calOnResizeMove(e) {
   const task = state.tasks.find(t => t.id === calResizeTaskId);
   if (!task) return;
+  const slot = calResizeSlotId ? (task.calSlots || []).find(s => s.id === calResizeSlotId) : null;
   const deltaPx  = e.clientY - calResizeStartY;
   const deltaMin = calSnap(Math.round((deltaPx / CAL_DAY_H) * 1440));
   const newDur   = Math.max(15, calResizeStartMin + deltaMin);
 
-  // Live-update just the chip height + time label (no full re-render)
-  const chip = document.querySelector(`.cal-chip[data-task-id="${calResizeTaskId}"]`);
+  const chipSel = calResizeSlotId
+    ? `.cal-chip[data-task-id="${calResizeTaskId}"][data-slot-id="${calResizeSlotId}"]`
+    : `.cal-chip[data-task-id="${calResizeTaskId}"]`;
+  const chip = document.querySelector(chipSel);
   if (chip) {
-    const startMin = task.scheduledMinute || 0;
+    const startMin = slot ? (slot.scheduledMinute || 0) : 0;
     chip.style.height = Math.max(CAL_SLOT_H, calMinToPx(newDur)) + 'px';
     const timeEl = chip.querySelector('.cal-chip-time');
     if (timeEl) timeEl.textContent = `${calMinToHHMM(startMin)} – ${calMinToHHMM(startMin + newDur)}`;
@@ -2788,13 +2835,23 @@ function calOnResizeUp(e) {
   if (task) {
     const deltaPx  = e.clientY - calResizeStartY;
     const deltaMin = calSnap(Math.round((deltaPx / CAL_DAY_H) * 1440));
-    task.calDurationMin = Math.max(15, calResizeStartMin + deltaMin);
+    const newDur = Math.max(15, calResizeStartMin + deltaMin);
+    if (calResizeSlotId) {
+      const slot = (task.calSlots || []).find(s => s.id === calResizeSlotId);
+      if (slot) slot.calDurationMin = newDur;
+    } else {
+      task.calDurationMin = newDur;
+    }
     save();
     renderCalendar();
   }
-  const chip = document.querySelector(`.cal-chip[data-task-id="${calResizeTaskId}"]`);
+  const chipSel = calResizeSlotId
+    ? `.cal-chip[data-task-id="${calResizeTaskId}"][data-slot-id="${calResizeSlotId}"]`
+    : `.cal-chip[data-task-id="${calResizeTaskId}"]`;
+  const chip = document.querySelector(chipSel);
   if (chip) { chip.classList.remove('cal-chip-resizing'); chip.draggable = true; }
   calResizeTaskId = null;
+  calResizeSlotId = null;
 }
 
 // ── Drag-to-select (create) logic ──
@@ -2838,6 +2895,7 @@ document.addEventListener('keydown', e => {
 
 // ── Inline edit popover ──
 let calEditPopoverTaskId = null;
+let calEditPopoverSlotId = null;
 let calEditSubjectId = '';
 let calNewSubjectId = '';
 let calNewSubjectFormVisible = false;
@@ -2872,17 +2930,19 @@ function calToggleSubjectPicker(pickerId) {
   picker.dataset.open = picker.dataset.open === '1' ? '0' : '1';
 }
 
-function calOpenInlineEdit(taskId, chipEl) {
+function calOpenInlineEdit(taskId, slotId, chipEl) {
   calCloseInlineEdit();
   const task = state.tasks.find(t => t.id === taskId);
   if (!task) return;
+  const slot = slotId ? (task.calSlots || []).find(s => s.id === slotId) : null;
   calEditPopoverTaskId = taskId;
+  calEditPopoverSlotId = slotId || null;
   calEditSubjectId = task.subjectId || '';
 
   const subject  = state.subjects.find(s => s.id === task.subjectId);
   const color    = subject ? subject.color : '#8E8E93';
-  const durMin   = calTaskDur(task);
-  const startMin = task.scheduledMinute || 0;
+  const durMin   = calTaskDur(task, slot);
+  const startMin = slot ? (slot.scheduledMinute || 0) : 0;
   const prio     = task.priority || 'medium';
   const poms     = task.pomodoros || 1;
 
@@ -2893,11 +2953,11 @@ function calOpenInlineEdit(taskId, chipEl) {
     <div class="cal-edit-pop-stripe" style="background:${color}"></div>
     <div class="cal-edit-pop-body">
       <input class="cal-edit-pop-input" id="calEditName" value="${esc(task.name)}" placeholder="Nom de la tâche" maxlength="80"
-             onkeydown="if(event.key==='Enter')calInlineSave('${taskId}')"/>
+             onkeydown="if(event.key==='Enter')calInlineSave('${taskId}','${slotId||''}')"/>
 
       <div class="cal-edit-cols">
         <div class="cal-edit-col-left">
-          <span class="cal-new-field-lbl">Horaire</span>
+          ${slotId ? `<span class="cal-new-field-lbl">Horaire</span>
           <div class="cal-new-row-times cal-edit-row-times">
             <div class="cal-new-time-field">
               <span class="cal-new-field-lbl">Début</span>
@@ -2908,17 +2968,24 @@ function calOpenInlineEdit(taskId, chipEl) {
               <span class="cal-new-field-lbl">Fin</span>
               <input class="cal-new-time-inp cal-edit-time-input" id="calEditEnd" type="time" value="${calMinToHHMM(startMin + durMin)}"/>
             </div>
-          </div>
+          </div>` : ''}
           <span class="cal-new-field-lbl" style="margin-top:8px;display:block">Matière</span>
           ${calRenderSubjectPicker(calEditSubjectId, 'calEditSubjectPicker', false, 'calEdit')}
         </div>
 
         <div class="cal-edit-col-right">
-          <span class="cal-new-field-lbl">Pomodoros</span>
+          <span class="cal-new-field-lbl">Pomodoros estimés</span>
           <div class="cal-new-pom cal-edit-pom-row">
             <button type="button" class="cal-new-pom-btn cal-edit-pom-btn" onclick="calEditChangePom(-1)">−</button>
             <span id="calEditPomVal">${poms}</span>
             <button type="button" class="cal-new-pom-btn cal-edit-pom-btn" onclick="calEditChangePom(1)">+</button>
+          </div>
+
+          <span class="cal-new-field-lbl" style="margin-top:8px;display:block">🍅 Faits</span>
+          <div class="cal-new-pom cal-edit-pom-row">
+            <button type="button" class="cal-new-pom-btn cal-edit-pom-btn" onclick="calEditChangeDonePom(-1)">−</button>
+            <span id="calEditDonePomVal">${task.donePomodoros||0}</span>
+            <button type="button" class="cal-new-pom-btn cal-edit-pom-btn" onclick="calEditChangeDonePom(1)">+</button>
           </div>
 
           <span class="cal-new-field-lbl" style="margin-top:8px;display:block">Priorité</span>
@@ -2935,14 +3002,17 @@ function calOpenInlineEdit(taskId, chipEl) {
       </div>
 
       <div class="cal-edit-pop-actions">
-        <button class="cal-edit-pop-del" onclick="calInlineDelete('${taskId}')" title="Supprimer">
+        <button class="cal-edit-pop-del" onclick="calInlineDelete('${taskId}','${slotId||''}')" title="${slotId ? 'Supprimer ce créneau' : 'Supprimer la tâche'}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </button>
+        ${slotId ? `<button class="cal-edit-pop-dup" onclick="calInlineDuplicateSlot('${taskId}','${slotId}')" title="Ajouter un autre créneau">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>` : ''}
         <button class="cal-edit-pop-play" onclick="calActivateTask('${taskId}','${task.subjectId||''}',event)" title="Activer">
           <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>
           Lancer
         </button>
-        <button class="cal-edit-pop-save" onclick="calInlineSave('${taskId}')">Enregistrer</button>
+        <button class="cal-edit-pop-save" onclick="calInlineSave('${taskId}','${slotId||''}')">Enregistrer</button>
       </div>
     </div>
     <button class="cal-edit-pop-close" onclick="calCloseInlineEdit()">✕</button>
@@ -2978,6 +3048,12 @@ function calEditChangePom(d) {
   el.textContent = next;
 }
 
+function calEditChangeDonePom(d) {
+  const el = document.getElementById('calEditDonePomVal');
+  if (!el) return;
+  el.textContent = Math.max(0, Math.min(99, (parseInt(el.textContent) || 0) + d));
+}
+
 function calEditSetPrio(p) {
   calEditPrioVal = p;
   document.querySelectorAll('#calEditPop .cal-edit-prio-btn').forEach(b =>
@@ -3000,30 +3076,37 @@ function calCloseInlineEdit() {
   document.removeEventListener('click', calEditOutsideClose);
   document.getElementById('calEditPop')?.remove();
   calEditPopoverTaskId = null;
+  calEditPopoverSlotId = null;
 }
 
-function calInlineSave(taskId) {
+function calInlineSave(taskId, slotId) {
   const task = state.tasks.find(t => t.id === taskId);
   if (!task) return;
+  const slot = slotId ? (task.calSlots || []).find(s => s.id === slotId) : null;
 
   const name = document.getElementById('calEditName')?.value.trim();
   if (name) task.name = name;
 
   const startVal = document.getElementById('calEditStart')?.value;
   const endVal   = document.getElementById('calEditEnd')?.value;
-  if (startVal) {
-    const [sh, sm] = startVal.split(':').map(Number);
-    task.scheduledMinute = calSnap(sh * 60 + sm);
-  }
-  if (startVal && endVal) {
-    const [sh, sm] = startVal.split(':').map(Number);
-    const [eh, em] = endVal.split(':').map(Number);
-    const dur = calSnap((eh * 60 + em) - (sh * 60 + sm));
-    if (dur >= 15) task.calDurationMin = dur;
+  if (slot) {
+    if (startVal) {
+      const [sh, sm] = startVal.split(':').map(Number);
+      slot.scheduledMinute = calSnap(sh * 60 + sm);
+    }
+    if (startVal && endVal) {
+      const [sh, sm] = startVal.split(':').map(Number);
+      const [eh, em] = endVal.split(':').map(Number);
+      const dur = calSnap((eh * 60 + em) - (sh * 60 + sm));
+      if (dur >= 15) slot.calDurationMin = dur;
+    }
   }
 
   const pomVal = parseInt(document.getElementById('calEditPomVal')?.textContent) || task.pomodoros;
   task.pomodoros = Math.max(1, Math.min(12, pomVal));
+
+  const donePomVal = parseInt(document.getElementById('calEditDonePomVal')?.textContent);
+  if (!isNaN(donePomVal)) task.donePomodoros = Math.max(0, donePomVal);
 
   const activePrio = document.querySelector('#calEditPop .cal-edit-prio-btn.active');
   if (activePrio) task.priority = activePrio.dataset.p;
@@ -3043,9 +3126,32 @@ function calInlineSave(taskId) {
   showToast('Tâche modifiée');
 }
 
-function calInlineDelete(taskId) {
+function calInlineDelete(taskId, slotId) {
   calCloseInlineEdit();
-  deleteTask(taskId);
+  if (slotId) {
+    const task = state.tasks.find(t => t.id === taskId);
+    if (task) {
+      task.calSlots = (task.calSlots || []).filter(s => s.id !== slotId);
+      save();
+      renderCalendar();
+      showToast('Créneau supprimé');
+    }
+  } else {
+    deleteTask(taskId);
+  }
+}
+
+function calInlineDuplicateSlot(taskId, slotId) {
+  const task = state.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const slot = (task.calSlots || []).find(s => s.id === slotId);
+  if (!slot) return;
+  const newSlot = { id: uid(), scheduledDate: slot.scheduledDate, scheduledMinute: Math.min(1410, (slot.scheduledMinute || 0) + calTaskDur(task, slot)), calDurationMin: slot.calDurationMin };
+  task.calSlots.push(newSlot);
+  save();
+  calCloseInlineEdit();
+  renderCalendar();
+  showToast('Créneau dupliqué');
 }
 
 // ── New task from calendar ──────────────────────
@@ -3282,9 +3388,7 @@ function calSaveNewTask(dateKey, fallbackStartMin, fallbackEndMin) {
     linkCorrection: linkCorr,
     done: false,
     addedDate: Date.now(),
-    scheduledDate: dateKey,
-    scheduledMinute,
-    calDurationMin,
+    calSlots: [{ id: uid(), scheduledDate: dateKey, scheduledMinute, calDurationMin }],
   };
 
   state.tasks.push(task);
