@@ -2589,11 +2589,11 @@ function renderCalendar() {
       const rect = col.getBoundingClientRect();
       const snappedMin = Math.max(0, Math.min(1425, calPxToMin(e.clientY - rect.top - calDragOffsetY)));
       if (slotId) {
-        // Move existing slot to new position
+        // Move existing slot
         const slot = (task.calSlots || []).find(s => s.id === slotId);
         if (slot) { slot.scheduledDate = key; slot.scheduledMinute = snappedMin; }
       } else {
-        // New placement from sidebar — add a slot
+        // New slot from sidebar
         if (!task.calSlots) task.calSlots = [];
         task.calSlots.push({ id: uid(), scheduledDate: key, scheduledMinute: snappedMin, calDurationMin: null });
       }
@@ -2609,7 +2609,7 @@ function renderCalendar() {
   // ── Unscheduled sidebar ──
   const unscheduledEl = document.getElementById('calUnscheduled');
   unscheduledEl.innerHTML = '';
-  const unscheduled = state.tasks.filter(t => !t.calSlots || t.calSlots.length === 0);
+  const unscheduled = state.tasks.filter(t => !t.done);
 
   unscheduledEl.addEventListener('dragover', e => {
     e.preventDefault();
@@ -2636,7 +2636,7 @@ function renderCalendar() {
   });
 
   if (unscheduled.length === 0) {
-    unscheduledEl.innerHTML = '<div class="cal-unscheduled-empty">Toutes planifiées ✓</div>';
+    unscheduledEl.innerHTML = '<div class="cal-unscheduled-empty">Aucune tâche</div>';
   } else {
     // Group by subject, then tasks without a subject at the end
     const groups = [];
@@ -2781,9 +2781,20 @@ function buildCalChip(task, slot, sidebar) {
     ${!sidebar ? '<div class="cal-chip-resize" title="Redimensionner"></div>' : ''}
   `;
 
-  // Click = inline edit popover (not on resize, not on play btn)
+  // mousedown with Alt = highlight in sidebar immediately (before any drag starts)
+  if (!sidebar && slotId) {
+    chip.addEventListener('mousedown', e => {
+      if (!e.altKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      calHighlightInSidebar(task.id);
+    });
+  }
+
+  // Click = inline edit popover (not on resize, not on play btn, not alt)
   chip.addEventListener('click', e => {
     if (e.target.closest('.cal-chip-resize') || e.target.closest('.cal-chip-btn-play')) return;
+    if (e.altKey) return;
     calOpenInlineEdit(task.id, slotId, chip);
   });
 
@@ -3141,7 +3152,25 @@ function calInlineDelete(taskId, slotId) {
   }
 }
 
-function calInlineDuplicateSlot(taskId, slotId) {
+function calHighlightInSidebar(taskId) {
+  const sidebar = document.getElementById('calUnscheduled');
+  if (!sidebar) return;
+  // Close all folders, open only the one containing this task
+  sidebar.querySelectorAll('.cal-folder').forEach(folder => {
+    const hasTask = !!folder.querySelector(`.cal-chip[data-task-id="${taskId}"]`);
+    folder.classList.toggle('open', hasTask);
+  });
+  const chip = sidebar.querySelector(`.cal-chip[data-task-id="${taskId}"]`);
+  if (!chip) return;
+  chip.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  chip.classList.remove('cal-chip-highlight');
+  void chip.offsetWidth;
+  chip.classList.add('cal-chip-highlight');
+  chip.addEventListener('animationend', () => chip.classList.remove('cal-chip-highlight'), { once: true });
+}
+
+function calInlineDuplicateSlot(taskId, slotId, e) {
+  if (e) e.stopPropagation();
   const task = state.tasks.find(t => t.id === taskId);
   if (!task) return;
   const slot = (task.calSlots || []).find(s => s.id === slotId);
