@@ -233,40 +233,84 @@ const THEME_PRESETS = {
 const ACCENT_SWATCHES = ['#3a6cff', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#111827'];
 
 // ── Persist ────────────────────────────────────
-function save() {
-  localStorage.setItem('focus_state', JSON.stringify(state));
+const DB_NAME = 'focus_db', DB_STORE = 'kv', DB_KEY = 'focus_state';
+let _db = null;
+
+function openDB() {
+  return new Promise((res, rej) => {
+    if (_db) return res(_db);
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+    req.onsuccess = e => { _db = e.target.result; res(_db); };
+    req.onerror = () => rej(req.error);
+  });
 }
+
+function save() {
+  const data = JSON.stringify(state);
+  localStorage.setItem('focus_state', data);
+  openDB().then(db => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    tx.objectStore(DB_STORE).put(data, DB_KEY);
+  }).catch(() => {});
+}
+
+function loadFromParsed(s) {
+  if (!s) return;
+  state.durations    = Object.assign({}, state.durations, s.durations || {});
+  state.subjects     = s.subjects     || [];
+  state.tasks        = (s.tasks || []).map(t => {
+    if (!t.calSlots) {
+      t.calSlots = t.scheduledDate
+        ? [{ id: uid(), scheduledDate: t.scheduledDate, scheduledMinute: t.scheduledMinute || 0, calDurationMin: t.calDurationMin || null }]
+        : [];
+      delete t.scheduledDate;
+      delete t.scheduledMinute;
+      delete t.calDurationMin;
+    }
+    return t;
+  });
+  state.log               = s.log               || [];
+  state.todayPomodoros    = s.todayPomodoros     || 0;
+  state.totalMinutes      = s.totalMinutes       || 0;
+  state.sessionsCompleted = s.sessionsCompleted  || 0;
+  state.prefs    = normalizePrefs(s.prefs || {});
+  state.tabOrder = normalizeTabOrder(Array.isArray(s.tabOrder) ? s.tabOrder : state.prefs.tabOrder || []);
+  state.freeTask = false;
+  state.timeLeft  = state.durations[state.mode] * 60;
+  state.totalTime = state.timeLeft;
+}
+
+window.addEventListener('beforeunload', () => {
+  const data = JSON.stringify(state);
+  localStorage.setItem('focus_state', data);
+  if (_db) {
+    try {
+      const tx = _db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put(data, DB_KEY);
+    } catch(e) {}
+  }
+});
+
 function load() {
-  const raw = localStorage.getItem('focus_state');
-  if (!raw) return;
-  try {
-    const s = JSON.parse(raw);
-    // Merge only non-timer state
-    state.durations    = Object.assign({}, state.durations, s.durations || {});
-    state.subjects     = s.subjects     || [];
-    state.tasks        = (s.tasks || []).map(t => {
-      // Migrate legacy single-slot fields to calSlots array
-      if (!t.calSlots) {
-        t.calSlots = t.scheduledDate
-          ? [{ id: uid(), scheduledDate: t.scheduledDate, scheduledMinute: t.scheduledMinute || 0, calDurationMin: t.calDurationMin || null }]
-          : [];
-        delete t.scheduledDate;
-        delete t.scheduledMinute;
-        delete t.calDurationMin;
-      }
-      return t;
-    });
-    state.log          = s.log          || [];
-    state.todayPomodoros = s.todayPomodoros || 0;
-    state.totalMinutes = s.totalMinutes || 0;
-    state.sessionsCompleted = s.sessionsCompleted || 0;
-    state.prefs = normalizePrefs(s.prefs || {});
-    state.tabOrder = normalizeTabOrder(Array.isArray(s.tabOrder) ? s.tabOrder : state.prefs.tabOrder || []);
-    state.freeTask = false;
-    // Reset timer to current mode duration on load
-    state.timeLeft  = state.durations[state.mode] * 60;
-    state.totalTime = state.timeLeft;
-  } catch(e) { /* ignore corrupt data */ }
+  openDB().then(db => {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const req = tx.objectStore(DB_STORE).get(DB_KEY);
+    req.onsuccess = () => {
+      const raw = req.result || localStorage.getItem('focus_state');
+      if (raw) try { loadFromParsed(JSON.parse(raw)); } catch(e) {}
+      initApp();
+    };
+    req.onerror = () => {
+      const raw = localStorage.getItem('focus_state');
+      if (raw) try { loadFromParsed(JSON.parse(raw)); } catch(e) {}
+      initApp();
+    };
+  }).catch(() => {
+    const raw = localStorage.getItem('focus_state');
+    if (raw) try { loadFromParsed(JSON.parse(raw)); } catch(e) {}
+    initApp();
+  });
 }
 
 function normalizePrefs(input = {}) {
@@ -3658,23 +3702,18 @@ function spAddPreset() {
 }
 
 // ── Init ───────────────────────────────────────
-function init() {
-  load();
-
+function initApp() {
   state.prefs = normalizePrefs(state.prefs || {});
   state.tabOrder = normalizeTabOrder(state.tabOrder || state.prefs.tabOrder || DEFAULT_TAB_ORDER);
   applyPreferences();
 
-  // Status bar clock
   updateClock();
   setInterval(updateClock, 10000);
 
-  // Timer init
   state.timeLeft  = state.durations[state.mode] * 60;
   state.totalTime = state.timeLeft;
   document.body.dataset.mode = state.mode;
 
-  // Duration UI
   ['pomodoro','short','long','sessions','pomBadge'].forEach(k => {
     const durEl = document.getElementById(`dur-${k}`);
     if (durEl) durEl.textContent = state.durations[k];
@@ -3713,4 +3752,4 @@ function init() {
   switchTab((state.prefs.defaultTab && !state.prefs.hiddenTabs.includes(state.prefs.defaultTab)) ? state.prefs.defaultTab : 'timer');
 }
 
-init();
+load();
